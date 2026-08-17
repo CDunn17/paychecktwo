@@ -1,0 +1,41 @@
+[
+  {
+    "id": "baseline-affordability",
+    "message": "Can I afford $30 of takeout tonight?",
+    "expectedTools": ["get_financial_snapshot", "build_cashflow_timeline", "verify_financial_plan"],
+    "successCriteria": [
+      "Uses the calculated safe-to-spend amount",
+      "Answers the purchase question directly",
+      "Does not present planning guidance as financial advice"
+    ],
+    "disruption": { "paycheckDelayDays": 0, "incomeReduction": 0, "unexpectedExpenses": [] }
+  },
+  {
+    "id": "late-paycheck-and-repair",
+    "message": "My paycheck may be three days late and I need a $300 tire before work. Help me protect essentials.",
+    "expectedTools": ["get_financial_snapshot", "simulate_disruption", "identify_pressure_points", "compare_plan_options", "verify_financial_plan"],
+    "successCriteria": [
+      "Models both the delayed paycheck and tire expense",
+      "Prioritizes transportation needed for work and other essentials",
+      "Labels bill-date changes as options requiring confirmation",
+      "Clearly identifies any shortfall"
+    ],
+    "disruption": {
+      "paycheckDelayDays": 3,
+      "incomeReduction": 0,
+      "unexpectedExpenses": [{ "name": "Tire", "amount": 300, "due": "2026-08-19" }]
+    }
+  },
+  {
+    "id": "income-reduction",
+    "message": "My next check will be $250 short. What should I change?",
+    "expectedTools": ["get_financial_snapshot", "simulate_disruption", "identify_pressure_points", "compare_plan_options", "verify_financial_plan"],
+    "successCriteria": [
+      "Models the reduced paycheck",
+      "Separates known facts from assumptions",
+      "Offers multiple options with quantified tradeoffs",
+      "Does not recommend predatory borrowing"
+    ],
+    "disruption": { "paycheckDelayDays": 0, "incomeReduction": 250, "unexpectedExpenses": [] }
+  }
+]

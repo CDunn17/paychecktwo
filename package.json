@@ -1,0 +1,28 @@
+{
+  "name": "paycheck-two",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A local-first paycheck planning companion.",
+  "scripts": {
+    "dev": "concurrently -k -n agent,web -c green,cyan \"npm:dev:agent\" \"npm:dev:web\"",
+    "dev:web": "vite --host 127.0.0.1",
+    "dev:agent": "tsx watch server/index.ts",
+    "agent": "tsx server/index.ts",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/plan.test.js && tsx --test test/calculations.test.ts",
+    "eval:fixtures": "tsx evals/run-fixtures.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vite": "^7.1.2"
+  },
+  "dependencies": {
+    "@strands-agents/sdk": "^1.13.0",
+    "zod": "^4.4.3"
+  }
+}
