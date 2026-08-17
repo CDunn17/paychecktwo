@@ -104,8 +104,10 @@ Financial calculations are deliberately outside the model. The model decides *wh
 
 ### Highest priority
 
-- [ ] Run and tune the full agent loop against an enabled Bedrock model
-- [ ] Capture successful real trajectories for the three evaluation scenarios
+- [x] Run the full agent loop against an enabled Bedrock Claude Sonnet 4.6 model
+- [x] Capture a successful real trajectory for the compound late-paycheck-and-repair scenario
+- [ ] Tune the live loop for latency and structured-output efficiency
+- [ ] Capture successful real trajectories for the baseline affordability and reduced-income scenarios
 - [ ] Add an automated model-backed evaluation layer for tool selection, trajectory, helpfulness, goal completion, and harmful recommendations
 - [ ] Stream Strands events to the browser instead of waiting for a complete response
 - [ ] Add explicit human approval and a Strands interrupt before any future state-changing tool
@@ -157,7 +159,11 @@ STRANDS_MODEL_ID=global.anthropic.claude-sonnet-4-6
 AGENT_PORT=8787
 ```
 
-Environment variables must be loaded into the shell before starting the process; this project does not silently load `.env` yet.
+The agent server automatically loads the Git-ignored `.env` file for local development. Put `AWS_BEARER_TOKEN_BEDROCK` there rather than committing or hard-coding a key. Shell environment variables remain supported and take precedence over values loaded from `.env`.
+
+When `AWS_BEARER_TOKEN_BEDROCK` is present, Paycheck Two passes it to the Strands `BedrockModel` through its explicit `apiKey` option. Otherwise, the AWS SDK standard credential chain is used.
+
+The current Strands 1.13 integration also applies a narrow authorization-header normalization after the SDK's named bearer middleware. This prevents differently-cased SigV4 and bearer authorization headers from becoming a prohibited multi-value header in Node. A regression test covers the behavior; remove the compatibility layer once the upstream SDK normalizes these headers itself.
 
 Start the Strands backend and Vite interface together:
 
@@ -196,6 +202,22 @@ npm run eval:fixtures
 ```
 
 `eval:fixtures` validates the deterministic setup for the initial agent scenarios. It does **not** claim that the model-backed agent has passed those cases. Real trajectory evaluation remains an explicit milestone above.
+
+## Latest live-agent result
+
+On August 17, 2026, the compound late-paycheck-and-repair scenario completed successfully against Claude Sonnet 4.6 through Amazon Bedrock. The authenticated Strands trajectory was:
+
+1. `get_financial_snapshot`
+2. `simulate_disruption`
+3. `identify_pressure_points`
+4. `build_cashflow_timeline`
+5. `compare_plan_options`
+6. `verify_financial_plan`
+7. Strands structured-output validation
+
+The verifier corrected the post-payday projection and preserved warnings about insurance coverage and biller confirmation. The final response matched `RecommendationSchema` and explicitly identified the $53 shortfall, quantified three options, preserved essential expenses, and distinguished assumptions from facts.
+
+The run also established a performance baseline: 11 agent cycles and approximately 148 seconds end to end, with repeated structured-output validation attempts. Reducing schema retries and streaming intermediate events are now explicit optimization priorities. This is one successful development run, not yet a reliability claim; the remaining scenarios and repeated-trial evaluation still need to be completed.
 
 ## Intended demo
 

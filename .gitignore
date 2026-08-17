@@ -4,3 +4,5 @@ dist/
 *.log
 .strands/
 .env
+.env.*
+!.env.example

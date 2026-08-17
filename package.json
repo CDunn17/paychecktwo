@@ -11,8 +11,9 @@
     "agent": "tsx server/index.ts",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/plan.test.js && tsx --test test/calculations.test.ts",
-    "eval:fixtures": "tsx evals/run-fixtures.ts"
+    "test": "node --test test/plan.test.js && tsx --test test/*.test.ts",
+    "eval:fixtures": "tsx evals/run-fixtures.ts",
+    "eval:live": "tsx evals/run-live.ts"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
@@ -23,6 +24,7 @@
   },
   "dependencies": {
     "@strands-agents/sdk": "^1.13.0",
+    "dotenv": "^17.4.2",
     "zod": "^4.4.3"
   }
 }
