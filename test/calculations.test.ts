@@ -52,6 +52,21 @@ test("unexpected expense creates a visible pressure point", () => {
   assert.equal(points[0]?.amount, 53);
 });
 
+test("reduced income remains visible as a pressure point even when pre-payday risk is stable", () => {
+  const result = analyzeCashflow(plan, "2026-08-17", {
+    paycheckDelayDays: 0,
+    incomeReduction: 250,
+    unexpectedExpenses: []
+  });
+  const points = findPressurePoints(result);
+  const incomePoint = points.find((point) => point.type === "income_reduction");
+  assert.equal(result.riskLevel, "stable");
+  assert.equal(result.incomeReduction, 250);
+  assert.equal(result.expectedPaycheck, 1590);
+  assert.equal(incomePoint?.amount, 250);
+  assert.match(incomePoint?.description ?? "", /next paycheck is reduced by \$250\.00/);
+});
+
 test("option comparison exposes impact and buffer tradeoffs", () => {
   const baseline = analyzeCashflow(plan, "2026-08-17");
   const options = compareOptions(plan, baseline, [

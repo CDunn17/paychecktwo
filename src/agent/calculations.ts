@@ -36,6 +36,7 @@ export interface CashflowAnalysis {
   daysToPayday: number;
   currentBalance: number;
   expectedPaycheck: number;
+  incomeReduction: number;
   protectedBuffer: number;
   obligationsTotal: number;
   rawRemainder: number;
@@ -83,6 +84,7 @@ export function analyzeCashflow(
     daysToPayday,
     currentBalance: plan.balance,
     expectedPaycheck,
+    incomeReduction: disruption.incomeReduction,
     protectedBuffer: plan.buffer,
     obligationsTotal,
     rawRemainder,
@@ -95,7 +97,7 @@ export function analyzeCashflow(
 }
 
 export interface PressurePoint {
-  type: "shortfall" | "large_bill" | "low_daily_room";
+  type: "shortfall" | "income_reduction" | "large_bill" | "low_daily_room";
   severity: "high" | "medium";
   description: string;
   amount: number;
@@ -110,6 +112,17 @@ export function findPressurePoints(analysis: CashflowAnalysis): PressurePoint[] 
       severity: "high",
       description: `Obligations and the protected buffer exceed the current balance by $${Math.abs(analysis.rawRemainder).toFixed(2)}.`,
       amount: Math.abs(analysis.rawRemainder),
+      relatedBillId: null
+    });
+  }
+
+  if (analysis.incomeReduction > 0) {
+    const originalPaycheck = analysis.expectedPaycheck + analysis.incomeReduction;
+    points.push({
+      type: "income_reduction",
+      severity: originalPaycheck > 0 && analysis.incomeReduction / originalPaycheck >= 0.25 ? "high" : "medium",
+      description: `The next paycheck is reduced by $${analysis.incomeReduction.toFixed(2)}.`,
+      amount: analysis.incomeReduction,
       relatedBillId: null
     });
   }

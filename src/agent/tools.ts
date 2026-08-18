@@ -35,7 +35,7 @@ export function createFinancialTools(planStore: PlanStore) {
 
   const identifyPressurePoints = tool({
     name: "identify_pressure_points",
-    description: "Identify a shortfall, an unusually large upcoming obligation, or dangerously low daily spending room from a deterministic scenario.",
+    description: "Identify a reduced paycheck, shortfall, unusually large upcoming obligation, or dangerously low daily spending room from a deterministic scenario. Use this after a disruption when the user asks what should change, even if current pre-payday risk is stable.",
     inputSchema: SessionInput.extend({
       asOf: IsoDateSchema,
       disruption: DisruptionSchema.optional()
@@ -48,7 +48,7 @@ export function createFinancialTools(planStore: PlanStore) {
 
   const comparePlanOptions = tool({
     name: "compare_plan_options",
-    description: "Compare concrete ways to create breathing room. It calculates impact but never changes bills, transfers money, or contacts a biller.",
+    description: "Compare concrete ways to create breathing room. Use this when a disruption prompt asks what should change or requests multiple options. It calculates quantified impacts but never changes bills, transfers money, or contacts a biller.",
     inputSchema: SessionInput.extend({
       asOf: IsoDateSchema,
       disruption: DisruptionSchema.optional(),
