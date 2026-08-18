@@ -2,14 +2,13 @@ import {
   Agent,
   AfterToolsEvent,
   AfterToolCallEvent,
-  BedrockModel,
   BeforeToolCallEvent,
   SessionManager,
   tool
 } from "@strands-agents/sdk";
 import { LocalFileStorage } from "@strands-agents/sdk/storage";
 import { z } from "zod";
-import { normalizeBedrockApiKeyHeader } from "./bedrock-auth.js";
+import { createBedrockModel } from "./model.js";
 import { canonicalizePolicyReview } from "./policy-review.js";
 import { createFinancialTools } from "./tools.js";
 import { ORCHESTRATOR_PROMPT, POLICY_REVIEWER_PROMPT, VERIFIER_PROMPT } from "./prompts.js";
@@ -37,15 +36,7 @@ export function createPaycheckAgent(
   sessionId: string,
   options: { ephemeral: boolean } = { ephemeral: true }
 ): AgentRuntime {
-  const bedrockApiKey = process.env.AWS_BEARER_TOKEN_BEDROCK;
-  const model = new BedrockModel({
-    region: process.env.AWS_REGION ?? "us-east-1",
-    modelId: process.env.STRANDS_MODEL_ID ?? "global.anthropic.claude-sonnet-4-6",
-    maxTokens: Number(process.env.STRANDS_MODEL_MAX_TOKENS ?? 2500),
-    temperature: 0.1,
-    ...(bedrockApiKey ? { apiKey: bedrockApiKey } : {})
-  });
-  if (bedrockApiKey) normalizeBedrockApiKeyHeader(model, bedrockApiKey);
+  const model = createBedrockModel();
 
   const verifier = new Agent({
     id: "plan-verifier",

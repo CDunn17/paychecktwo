@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import dotenv from "dotenv";
 import { analyzeCashflow } from "../src/agent/calculations.js";
 import { actionRequiresApproval } from "../src/agent/recommendation-policy.js";
 import {
@@ -8,6 +9,16 @@ import {
   FinancialPlanSchema,
   RecommendationSchema
 } from "../src/agent/schemas.js";
+import {
+  judgeRecommendation,
+  SEMANTIC_RUBRIC_VERSION,
+  SemanticJudgeError,
+  type SemanticEvaluationReport,
+  type SemanticJudgeFailureCode,
+  type SemanticJudgeResult
+} from "./semantic-judge.js";
+
+dotenv.config({ quiet: true });
 
 interface EvaluationFixture {
   id: string;
@@ -61,6 +72,9 @@ interface LiveResult {
   failedTools: string[];
   approvalViolations: string[];
   automaticChecks: Record<string, boolean> | null;
+  semanticEvaluation: SemanticEvaluationReport | null;
+  semanticMetrics: SemanticJudgeResult["metrics"];
+  semanticFailureReason?: SemanticJudgeFailureCode;
   humanReviewCriteria: string[];
   failureReason?: "timeout" | "request_or_validation_error";
 }
@@ -101,10 +115,14 @@ const baseUrl = process.env.AGENT_BASE_URL ?? "http://127.0.0.1:8787";
 const allFixtures = JSON.parse(
   await readFile(new URL("./cases.json", import.meta.url), "utf8")
 ) as EvaluationFixture[];
+const policyExpectedByFixtureId = new Map(
+  allFixtures.map((fixture) => [fixture.id, fixture.expectedTools.includes("review_terms_and_policies")])
+);
 const cliArgs = process.argv.slice(2);
 const requestedFixtureIds = new Set<string>();
 let trialsPerScenario = 1;
 let outputPath: string | undefined;
+let semanticJudgeEnabled = false;
 for (let index = 0; index < cliArgs.length; index += 1) {
   const argument = cliArgs[index]!;
   if (argument === "--trials") {
@@ -117,6 +135,8 @@ for (let index = 0; index < cliArgs.length; index += 1) {
     index += 1;
   } else if (argument.startsWith("--output=")) {
     outputPath = argument.slice("--output=".length);
+  } else if (argument === "--semantic") {
+    semanticJudgeEnabled = true;
   } else {
     requestedFixtureIds.add(argument);
   }
@@ -211,7 +231,32 @@ for (const fixture of fixtures) {
       && responseBody.safety.outputScanPassed === true,
     completedWithStructuredOutput: responseBody.stopReason === "toolUse"
   };
-  const passed = Object.values(automaticChecks).every(Boolean);
+  const automaticPassed = Object.values(automaticChecks).every(Boolean);
+  let semanticEvaluation: SemanticEvaluationReport | null = null;
+  let semanticMetrics: SemanticJudgeResult["metrics"] = null;
+  let semanticFailureReason: SemanticJudgeFailureCode | undefined;
+  if (semanticJudgeEnabled) {
+    try {
+      const semanticResult = await judgeRecommendation({
+        scenarioId: fixture.id,
+        syntheticUserGoal: fixture.message,
+        successCriteria: fixture.successCriteria,
+        deterministicEvidence: {
+          riskLevel: expectedAnalysis.riskLevel,
+          safeToSpend: expectedAnalysis.safeToSpend,
+          dailyFlexibleLimit: expectedAnalysis.dailyFlexibleLimit
+        },
+        recommendation,
+        policyExpected: expectedPolicyReview
+      });
+      semanticEvaluation = semanticResult.evaluation;
+      semanticMetrics = semanticResult.metrics;
+    } catch (error) {
+      semanticFailureReason = error instanceof SemanticJudgeError ? error.code : "judge_unavailable";
+    }
+  }
+  const semanticPassed = !semanticJudgeEnabled || semanticEvaluation?.passed === true;
+  const passed = automaticPassed && semanticPassed;
   const result = {
     id: fixture.id,
     trial,
@@ -228,14 +273,20 @@ for (const fixture of fixtures) {
     failedTools,
     approvalViolations,
     automaticChecks,
+    semanticEvaluation,
+    semanticMetrics,
+    ...(semanticFailureReason ? { semanticFailureReason } : {}),
     humanReviewCriteria: fixture.successCriteria
   };
   results.push(result);
   console.log(
-    `${passed ? "PASS" : "FAIL"} ${fixture.id.padEnd(28)} trial=${trial}/${trialsPerScenario} ${(result.durationMs / 1000).toFixed(1).padStart(6)}s  cycles=${String(result.cycles).padStart(2)}  tokens=${String(result.tokens?.totalTokens ?? "?").padStart(6)}  schema_attempts=${result.structuredOutputAttempts}`
+    `${passed ? "PASS" : "FAIL"} ${fixture.id.padEnd(28)} trial=${trial}/${trialsPerScenario} ${(result.durationMs / 1000).toFixed(1).padStart(6)}s  cycles=${String(result.cycles).padStart(2)}  tokens=${String(result.tokens?.totalTokens ?? "?").padStart(6)}  schema_attempts=${result.structuredOutputAttempts}${semanticJudgeEnabled ? `  semantic=${semanticEvaluation?.passed ? "PASS" : "FAIL"}` : ""}`
   );
-  if (!passed) {
+  if (!automaticPassed) {
     console.log(`  failed_checks=${Object.entries(automaticChecks).filter(([, value]) => !value).map(([name]) => name).join(",")}`);
+  }
+  if (semanticJudgeEnabled && !semanticPassed) {
+    console.log(`  semantic_failures=${semanticEvaluation?.failedCriteria.join(",") ?? semanticFailureReason ?? "unknown"}`);
   }
     } catch (error) {
       const timedOut = error instanceof DOMException && error.name === "TimeoutError";
@@ -255,6 +306,8 @@ for (const fixture of fixtures) {
         failedTools: [],
         approvalViolations: [],
         automaticChecks: null,
+        semanticEvaluation: null,
+        semanticMetrics: null,
         humanReviewCriteria: fixture.successCriteria,
         failureReason: timedOut ? "timeout" : "request_or_validation_error"
       };
@@ -284,6 +337,53 @@ const estimateCost = (selectedResults: LiveResult[]) => {
     )
   };
 };
+const estimateSemanticJudgeCost = (selectedResults: LiveResult[]) => {
+  const inputTokens = selectedResults.reduce((total, result) => total + (result.semanticMetrics?.tokens.inputTokens ?? 0), 0);
+  const outputTokens = selectedResults.reduce((total, result) => total + (result.semanticMetrics?.tokens.outputTokens ?? 0), 0);
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    estimatedUsd: rounded(
+      ((inputTokens * inputUsdPerMillionTokens) + (outputTokens * outputUsdPerMillionTokens)) / 1_000_000,
+      4
+    )
+  };
+};
+const semanticScoreNames = [
+  "answersUserGoal",
+  "clarity",
+  "nonjudgmentalAutonomy",
+  "harmfulAdviceSafety",
+  "assumptionsVisible",
+  "prosConsAndTradeoffs",
+  "protectsEssentials",
+  "evidenceGrounding",
+  "policyCaution"
+] as const;
+const summarizeSemanticEvaluations = (selectedResults: LiveResult[]) => {
+  if (!semanticJudgeEnabled) return null;
+  const evaluations = selectedResults.flatMap((result) => result.semanticEvaluation
+    ? [{ fixtureId: result.id, evaluation: result.semanticEvaluation }]
+    : []);
+  return {
+    judgedRuns: evaluations.length,
+    passedRuns: evaluations.filter(({ evaluation }) => evaluation.passed).length,
+    passRatePercent: rounded((evaluations.filter(({ evaluation }) => evaluation.passed).length / selectedResults.length) * 100, 1),
+    meanScores: Object.fromEntries(semanticScoreNames.map((name) => {
+      const values = evaluations.flatMap(({ fixtureId, evaluation }) => {
+        if (name === "policyCaution" && !policyExpectedByFixtureId.get(fixtureId)) return [];
+        const value = evaluation.scores[name];
+        return value === null ? [] : [value];
+      });
+      return [name, values.length === 0 ? null : rounded(values.reduce((total, value) => total + value, 0) / values.length, 2)];
+    })),
+    styleFlags: [...new Set(evaluations.flatMap(({ evaluation }) => evaluation.styleFlags))],
+    safetyFlags: [...new Set(evaluations.flatMap(({ evaluation }) => evaluation.safetyFlags))],
+    failedCriteria: [...new Set(evaluations.flatMap(({ evaluation }) => evaluation.failedCriteria))],
+    judgeCost: estimateSemanticJudgeCost(selectedResults)
+  };
+};
 const scenarioSummaries = fixtures.map((fixture) => {
   const fixtureResults = results.filter((result) => result.id === fixture.id);
   const passedRuns = fixtureResults.filter((result) => result.passed).length;
@@ -300,9 +400,13 @@ const scenarioSummaries = fixtures.map((fixture) => {
       (fixtureResults.filter((result) => result.structuredOutputAttempts === 1).length / fixtureResults.length) * 100,
       1
     ),
-    cost: estimateCost(fixtureResults)
+    cost: estimateCost(fixtureResults),
+    semantic: summarizeSemanticEvaluations(fixtureResults)
   };
 });
+
+const mainAgentCost = estimateCost(results);
+const semanticJudgeCost = estimateSemanticJudgeCost(results);
 
 const report = {
   generatedAt: new Date().toISOString(),
@@ -310,6 +414,11 @@ const report = {
   model: health.model ?? null,
   contractVersion: health.contractVersion ?? null,
   trialsPerScenario,
+  semanticJudgeEnabled,
+  semanticJudgeModel: semanticJudgeEnabled
+    ? (process.env.EVAL_JUDGE_MODEL_ID ?? process.env.STRANDS_MODEL_ID ?? "global.anthropic.claude-sonnet-4-6")
+    : null,
+  semanticRubricVersion: semanticJudgeEnabled ? SEMANTIC_RUBRIC_VERSION : null,
   passed: results.every((result) => result.passed),
   scenariosPassingAllTrials: scenarioSummaries.filter((summary) => summary.passedRuns === summary.runs).length,
   scenariosTotal: fixtures.length,
@@ -322,7 +431,10 @@ const report = {
     outputUsdPerMillionTokens,
     note: "Estimate from reported input/output tokens only; excludes cache token classes, taxes, credits, and other AWS charges."
   },
-  totalCost: estimateCost(results),
+  totalCost: mainAgentCost,
+  semanticJudgeCost: semanticJudgeEnabled ? semanticJudgeCost : null,
+  combinedEstimatedCostUsd: rounded(mainAgentCost.estimatedUsd + (semanticJudgeEnabled ? semanticJudgeCost.estimatedUsd : 0), 4),
+  semanticSummary: summarizeSemanticEvaluations(results),
   scenarioSummaries,
   results
 };

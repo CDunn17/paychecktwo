@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/plan.test.js && tsx --test test/*.test.ts",
     "eval:fixtures": "tsx evals/run-fixtures.ts",
-    "eval:live": "tsx evals/run-live.ts"
+    "eval:live": "tsx evals/run-live.ts",
+    "eval:semantic:adversarial": "tsx evals/run-semantic-adversarial.ts",
+    "eval:semantic:reclassify": "tsx evals/reclassify-semantic-report.ts"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
