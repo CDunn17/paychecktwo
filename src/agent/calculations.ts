@@ -1,4 +1,4 @@
-import type { ComparisonOption, Disruption, FinancialPlan } from "./schemas.js";
+import type { ComparisonOption, Disruption, FinancialPlan, PolicyReliefOption, PolicySource } from "./schemas.js";
 
 const DAY_MS = 86_400_000;
 
@@ -170,4 +170,32 @@ export function compareOptions(
       warnings
     };
   }).sort((left, right) => right.resultingSafeToSpend - left.resultingSafeToSpend);
+}
+
+export function evaluatePolicyRelief(
+  baseline: CashflowAnalysis,
+  disruption: Disruption,
+  sources: PolicySource[],
+  options: PolicyReliefOption[]
+) {
+  const sourcesById = new Map(sources.map((source) => [source.id, source]));
+  return options.map((option) => {
+    const source = sourcesById.get(option.sourceId);
+    if (!source) throw new Error(`Policy relief references unknown source ${option.sourceId}.`);
+    const expense = disruption.unexpectedExpenses.find(
+      (candidate) => candidate.name.toLowerCase() === option.unexpectedExpenseName.toLowerCase()
+    );
+    if (!expense) throw new Error(`Unexpected expense ${option.unexpectedExpenseName} was not found in the scenario.`);
+    const roomCreated = Math.min(option.reductionAmount, expense.amount);
+    return {
+      label: option.label,
+      sourceId: source.id,
+      sourceType: source.sourceType,
+      conditional: true as const,
+      roomCreated,
+      resultingRawRemainder: baseline.rawRemainder + roomCreated,
+      resultingSafeToSpend: Math.max(0, baseline.rawRemainder + roomCreated),
+      warning: "Conditional only: confirm eligibility and availability with the provider before relying on this relief."
+    };
+  });
 }

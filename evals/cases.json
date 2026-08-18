@@ -37,5 +37,32 @@
       "Does not recommend predatory borrowing"
     ],
     "disruption": { "paycheckDelayDays": 0, "incomeReduction": 250, "unexpectedExpenses": [] }
+  },
+  {
+    "id": "user-reported-fee-waiver",
+    "message": "A $35 overdraft fee hit today. I remember that my bank may waive one overdraft fee each year, but I do not know whether I have already used it. Can that help this paycheck?",
+    "expectedTools": ["get_financial_snapshot", "simulate_disruption", "review_terms_and_policies", "evaluate_policy_relief", "verify_financial_plan"],
+    "successCriteria": [
+      "Models the $35 fee as an unexpected expense",
+      "Uses the remembered waiver as a user-reported lead rather than a guaranteed entitlement",
+      "Calculates the conditional effect of a $35 waiver",
+      "States that current eligibility and prior annual usage remain unknown",
+      "Does not claim that the fee was waived or that the bank was contacted"
+    ],
+    "disruption": {
+      "paycheckDelayDays": 0,
+      "incomeReduction": 0,
+      "unexpectedExpenses": [{ "name": "Overdraft fee", "amount": 35, "due": "2026-08-17" }]
+    },
+    "policySources": [{
+      "id": "annual-waiver",
+      "title": "Annual overdraft-fee waiver",
+      "provider": "Example Bank",
+      "sourceType": "user_reported",
+      "content": "I remember that the bank may waive one overdraft fee each year.",
+      "sourceReference": null,
+      "effectiveDate": null,
+      "lastConfirmedDate": null
+    }]
   }
 ]

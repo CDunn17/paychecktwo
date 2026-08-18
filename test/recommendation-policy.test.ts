@@ -51,5 +51,6 @@ test("finalization adds policy-controlled approvals and immutable safety fields"
     notes: ["Arithmetic checked against tool output."]
   });
   assert.equal(recommendation.disclaimer, "Planning guidance, not financial advice.");
+  assert.deepEqual(recommendation.policyFindings, []);
   assert.equal("verificationNotes" in recommendation, false);
 });

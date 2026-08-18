@@ -1,7 +1,7 @@
 import { tool } from "@strands-agents/sdk";
 import { z } from "zod";
-import { analyzeCashflow, compareOptions, findPressurePoints } from "./calculations.js";
-import { ComparisonOptionSchema, DisruptionSchema, IsoDateSchema } from "./schemas.js";
+import { analyzeCashflow, compareOptions, evaluatePolicyRelief as calculatePolicyRelief, findPressurePoints } from "./calculations.js";
+import { ComparisonOptionSchema, DisruptionSchema, IsoDateSchema, PolicyReliefOptionSchema } from "./schemas.js";
 import type { PlanStore } from "./plan-store.js";
 
 const SessionInput = z.object({
@@ -61,5 +61,23 @@ export function createFinancialTools(planStore: PlanStore) {
     }
   });
 
-  return [getFinancialSnapshot, buildCashflowTimeline, simulateDisruption, identifyPressurePoints, comparePlanOptions];
+  const evaluatePolicyRelief = tool({
+    name: "evaluate_policy_relief",
+    description: "Conditionally calculate how a reviewed policy could change an unexpected expense. This is a what-if calculation and never claims that a waiver or benefit was granted.",
+    inputSchema: SessionInput.extend({
+      asOf: IsoDateSchema,
+      disruption: DisruptionSchema,
+      options: z.array(PolicyReliefOptionSchema).min(1).max(6)
+    }),
+    callback: ({ sessionId, asOf, disruption, options }) => {
+      const plan = planStore.get(sessionId);
+      const baseline = analyzeCashflow(plan, asOf, disruption);
+      return {
+        baseline,
+        conditionalOptions: calculatePolicyRelief(baseline, disruption, planStore.getPolicySources(sessionId), options)
+      };
+    }
+  });
+
+  return [getFinancialSnapshot, buildCashflowTimeline, simulateDisruption, identifyPressurePoints, comparePlanOptions, evaluatePolicyRelief];
 }

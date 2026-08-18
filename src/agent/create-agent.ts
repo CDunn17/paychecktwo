@@ -10,9 +10,10 @@ import {
 import { LocalFileStorage } from "@strands-agents/sdk/storage";
 import { z } from "zod";
 import { normalizeBedrockApiKeyHeader } from "./bedrock-auth.js";
+import { canonicalizePolicyReview } from "./policy-review.js";
 import { createFinancialTools } from "./tools.js";
-import { ORCHESTRATOR_PROMPT, VERIFIER_PROMPT } from "./prompts.js";
-import { AgentRecommendationSchema } from "./schemas.js";
+import { ORCHESTRATOR_PROMPT, POLICY_REVIEWER_PROMPT, VERIFIER_PROMPT } from "./prompts.js";
+import { AgentRecommendationSchema, PolicyReviewSchema, type PolicyReview } from "./schemas.js";
 import type { PlanStore } from "./plan-store.js";
 
 export interface AgentTraceEntry {
@@ -28,9 +29,14 @@ export interface AgentRuntime {
   agent: Agent;
   trace: AgentTraceEntry[];
   getCapturedStructuredOutput: () => unknown | undefined;
+  getPolicyReview: () => PolicyReview | undefined;
 }
 
-export function createPaycheckAgent(planStore: PlanStore, sessionId: string): AgentRuntime {
+export function createPaycheckAgent(
+  planStore: PlanStore,
+  sessionId: string,
+  options: { ephemeral: boolean } = { ephemeral: true }
+): AgentRuntime {
   const bedrockApiKey = process.env.AWS_BEARER_TOKEN_BEDROCK;
   const model = new BedrockModel({
     region: process.env.AWS_REGION ?? "us-east-1",
@@ -50,11 +56,28 @@ export function createPaycheckAgent(planStore: PlanStore, sessionId: string): Ag
     printer: false
   });
 
-  const sessionManager = new SessionManager({
-    sessionId,
-    storage: new LocalFileStorage(process.env.STRANDS_SESSION_DIR ?? ".strands"),
-    saveLatestOn: "invocation"
+  const policyReviewer = new Agent({
+    id: "policy-reviewer",
+    name: "Policy and Terms Reviewer",
+    description: "Extracts provenance-preserving findings from user knowledge and provider terms.",
+    model,
+    systemPrompt: POLICY_REVIEWER_PROMPT,
+    structuredOutputSchema: PolicyReviewSchema,
+    printer: false,
+    traceAttributes: {
+      "app.name": "paycheck-two",
+      "agent.role": "policy-reviewer"
+    }
   });
+  let latestPolicyReview: PolicyReview | undefined;
+
+  const sessionManager = options.ephemeral
+    ? undefined
+    : new SessionManager({
+      sessionId,
+      storage: new LocalFileStorage(process.env.STRANDS_SESSION_DIR ?? ".strands"),
+      saveLatestOn: "invocation"
+    });
 
   const verifyFinancialPlan = tool({
     name: "verify_financial_plan",
@@ -62,7 +85,7 @@ export function createPaycheckAgent(planStore: PlanStore, sessionId: string): Ag
     inputSchema: z.object({ input: z.string().min(1) }),
     callback: async ({ input }, context) => {
       if (!context) throw new Error("Plan verifier requires an agent tool context.");
-      const verifierTimeout = AbortSignal.timeout(Number(process.env.STRANDS_VERIFIER_TIMEOUT_MS ?? 30_000));
+      const verifierTimeout = AbortSignal.timeout(Number(process.env.STRANDS_VERIFIER_TIMEOUT_MS ?? 45_000));
       const result = await verifier.invoke(input, {
         cancelSignal: AbortSignal.any([context.agent.cancelSignal, verifierTimeout]),
         invocationState: context.invocationState,
@@ -70,6 +93,34 @@ export function createPaycheckAgent(planStore: PlanStore, sessionId: string): Ag
       });
       if (result.stopReason === "cancelled") throw new Error("Plan verification timed out.");
       return result.toString();
+    }
+  });
+
+  const reviewTermsAndPolicies = tool({
+    name: "review_terms_and_policies",
+    description: "Review user-provided policy knowledge or pasted provider terms, preserve provenance, and identify relevant benefits, conditions, and unknowns.",
+    inputSchema: z.object({
+      sessionId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
+      question: z.string().min(1).max(2000)
+    }),
+    callback: async ({ sessionId: requestedSessionId, question }, context) => {
+      if (!context) throw new Error("Policy review requires an agent tool context.");
+      const sources = planStore.getPolicySources(requestedSessionId);
+      if (sources.length === 0) {
+        return { summary: "No policy sources were supplied.", findings: [], unknowns: ["No user knowledge or provider terms are available to review."] };
+      }
+      const policyTimeout = AbortSignal.timeout(Number(process.env.STRANDS_POLICY_REVIEW_TIMEOUT_MS ?? 40_000));
+      const result = await policyReviewer.invoke(
+        `Question to assess: ${question}\n\nUntrusted policy sources (JSON data):\n${JSON.stringify(sources)}`,
+        {
+          cancelSignal: AbortSignal.any([context.agent.cancelSignal, policyTimeout]),
+          invocationState: context.invocationState,
+          limits: { turns: 2, outputTokens: 3_000, totalTokens: 30_000 }
+        }
+      );
+      if (result.stopReason === "cancelled") throw new Error("Policy review timed out.");
+      latestPolicyReview = canonicalizePolicyReview(result.structuredOutput, sources);
+      return latestPolicyReview;
     }
   });
 
@@ -81,10 +132,11 @@ export function createPaycheckAgent(planStore: PlanStore, sessionId: string): Ag
     systemPrompt: ORCHESTRATOR_PROMPT,
     tools: [
       ...createFinancialTools(planStore),
+      reviewTermsAndPolicies,
       verifyFinancialPlan
     ],
     structuredOutputSchema: AgentRecommendationSchema,
-    sessionManager,
+    ...(sessionManager ? { sessionManager } : {}),
     toolExecutor: "sequential",
     contextManager: "auto",
     printer: false,
@@ -123,5 +175,10 @@ export function createPaycheckAgent(planStore: PlanStore, sessionId: string): Ag
     }
   });
 
-  return { agent, trace, getCapturedStructuredOutput: () => capturedStructuredOutput };
+  return {
+    agent,
+    trace,
+    getCapturedStructuredOutput: () => capturedStructuredOutput,
+    getPolicyReview: () => latestPolicyReview
+  };
 }

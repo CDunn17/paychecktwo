@@ -40,6 +40,70 @@ export const ComparisonOptionSchema = z.object({
   bufferReduction: z.number().nonnegative().finite().default(0)
 });
 
+export const PolicySourceTypeSchema = z.enum([
+  "user_reported",
+  "provider_terms",
+  "provider_confirmation"
+]);
+
+export const PolicySourceSchema = z.object({
+  id: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),
+  title: z.string().min(1).max(120),
+  provider: z.string().min(1).max(120),
+  sourceType: PolicySourceTypeSchema,
+  content: z.string().min(3).max(12_000),
+  sourceReference: z.string().max(240).nullable().default(null),
+  effectiveDate: IsoDateSchema.nullable().default(null),
+  lastConfirmedDate: IsoDateSchema.nullable().default(null)
+});
+
+export const PolicySupportLevelSchema = z.enum([
+  "user_reported",
+  "explicit",
+  "ambiguous"
+]);
+
+export const PolicyFindingSchema = z.object({
+  sourceId: z.string(),
+  sourceType: PolicySourceTypeSchema,
+  title: z.string(),
+  provider: z.string(),
+  finding: z.string(),
+  supportLevel: PolicySupportLevelSchema,
+  evidenceQuote: z.string().max(600).nullable(),
+  sourceReference: z.string().max(240).nullable(),
+  eligibilityConditions: z.array(z.string()),
+  needsConfirmation: z.boolean()
+}).superRefine((finding, context) => {
+  if (finding.sourceType === "user_reported") {
+    if (finding.supportLevel !== "user_reported") {
+      context.addIssue({ code: "custom", path: ["supportLevel"], message: "User-reported knowledge must remain user_reported." });
+    }
+    if (finding.evidenceQuote !== null) {
+      context.addIssue({ code: "custom", path: ["evidenceQuote"], message: "User-reported knowledge cannot have a document quote." });
+    }
+    if (!finding.needsConfirmation) {
+      context.addIssue({ code: "custom", path: ["needsConfirmation"], message: "User-reported knowledge must be confirmed before relying on it." });
+    }
+  }
+  if (finding.sourceType === "provider_terms" && finding.supportLevel === "explicit" && !finding.evidenceQuote) {
+    context.addIssue({ code: "custom", path: ["evidenceQuote"], message: "An explicit terms finding requires a supporting quote." });
+  }
+});
+
+export const PolicyReviewSchema = z.object({
+  summary: z.string(),
+  findings: z.array(PolicyFindingSchema).max(20),
+  unknowns: z.array(z.string()).max(20)
+}).describe("A provenance-preserving review of user knowledge and provider terms relevant to the current paycheck question");
+
+export const PolicyReliefOptionSchema = z.object({
+  label: z.string().min(1).max(120),
+  sourceId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),
+  unexpectedExpenseName: z.string().min(1).max(80),
+  reductionAmount: z.number().positive().finite()
+});
+
 export const ActionTypeSchema = z.enum([
   "review_information",
   "set_spending_target",
@@ -52,9 +116,9 @@ export const ActionTypeSchema = z.enum([
 
 const RecommendationCoreSchema = z.object({
   summary: z.string().min(1).describe("A concise, empathetic answer grounded in tool results"),
-  riskLevel: z.enum(["stable", "tight", "shortfall"]),
-  safeToSpend: z.number().nonnegative(),
-  dailyFlexibleLimit: z.number().nonnegative().nullable(),
+  riskLevel: z.enum(["stable", "tight", "shortfall"]).describe("The primary timeline or disruption tool's riskLevel before optional plan changes"),
+  safeToSpend: z.number().nonnegative().describe("The primary timeline or disruption tool's safeToSpend before optional plan changes"),
+  dailyFlexibleLimit: z.number().nonnegative().nullable().describe("The primary timeline or disruption tool's dailyFlexibleLimit before optional plan changes"),
   assumptions: z.array(z.string()),
   evidence: z.array(z.object({
     source: z.string(),
@@ -69,7 +133,8 @@ const RecommendationCoreSchema = z.object({
     title: z.string(),
     rationale: z.string(),
     actionType: ActionTypeSchema.describe("Classify the action; the application decides whether approval is required")
-  }))
+  })),
+  policyFindings: z.array(PolicyFindingSchema).default([]).describe("Only findings returned by review_terms_and_policies; use an empty array when no policy source was reviewed")
 });
 
 export const AgentRecommendationSchema = RecommendationCoreSchema.extend({
@@ -90,16 +155,32 @@ export const RecommendationSchema = RecommendationCoreSchema.omit({ recommendedA
   disclaimer: z.literal("Planning guidance, not financial advice.")
 });
 
-export const AgentRequestSchema = z.object({
+const AgentRequestCoreSchema = z.object({
   sessionId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
   message: z.string().min(1).max(4000),
-  plan: FinancialPlanSchema
+  plan: FinancialPlanSchema,
+  asOf: IsoDateSchema.optional().describe("Optional deterministic date for evaluation and replay"),
+  policySources: z.array(PolicySourceSchema).max(20).default([])
+});
+
+export const SafetyPreviewRequestSchema = AgentRequestCoreSchema;
+
+export const AgentRequestSchema = AgentRequestCoreSchema.extend({
+  privacy: z.object({
+    consentToModel: z.literal(true),
+    ephemeral: z.boolean().default(true)
+  })
 });
 
 export type FinancialPlan = z.infer<typeof FinancialPlanSchema>;
 export type Disruption = z.infer<typeof DisruptionSchema>;
 export type ComparisonOption = z.infer<typeof ComparisonOptionSchema>;
+export type PolicySource = z.infer<typeof PolicySourceSchema>;
+export type PolicyFinding = z.infer<typeof PolicyFindingSchema>;
+export type PolicyReview = z.infer<typeof PolicyReviewSchema>;
+export type PolicyReliefOption = z.infer<typeof PolicyReliefOptionSchema>;
 export type ActionType = z.infer<typeof ActionTypeSchema>;
 export type AgentRecommendation = z.infer<typeof AgentRecommendationSchema>;
 export type Recommendation = z.infer<typeof RecommendationSchema>;
+export type SafetyPreviewRequest = z.infer<typeof SafetyPreviewRequestSchema>;
 export type AgentRequest = z.infer<typeof AgentRequestSchema>;

@@ -1,8 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import dotenv from "dotenv";
 import { ZodError } from "zod";
-import { AgentIncompleteError, PaycheckAgentService } from "../src/agent/service.js";
-import { AgentRequestSchema } from "../src/agent/schemas.js";
+import { AgentIncompleteError, PaycheckAgentService, UnsafeAgentOutputError } from "../src/agent/service.js";
+import { buildSafetyPreview } from "../src/agent/safety.js";
+import { AgentRequestSchema, SafetyPreviewRequestSchema } from "../src/agent/schemas.js";
 
 dotenv.config({ quiet: true });
 
@@ -50,15 +51,34 @@ const server = createServer(async (request, response) => {
       model: process.env.STRANDS_MODEL_ID ?? "global.anthropic.claude-sonnet-4-6",
       modelAccess: "unchecked",
       authentication: process.env.AWS_BEARER_TOKEN_BEDROCK ? "bedrock-api-key" : "aws-credential-chain",
-      contractVersion: 5,
+      contractVersion: 8,
       executionBudget: {
         timeoutMs: Number(process.env.STRANDS_TIMEOUT_MS ?? 120_000),
-        verifierTimeoutMs: Number(process.env.STRANDS_VERIFIER_TIMEOUT_MS ?? 30_000),
+        verifierTimeoutMs: Number(process.env.STRANDS_VERIFIER_TIMEOUT_MS ?? 45_000),
+        policyReviewTimeoutMs: Number(process.env.STRANDS_POLICY_REVIEW_TIMEOUT_MS ?? 40_000),
         turns: Number(process.env.STRANDS_TURN_LIMIT ?? 9),
         outputTokens: Number(process.env.STRANDS_OUTPUT_TOKEN_LIMIT ?? 12_000),
         totalTokens: Number(process.env.STRANDS_TOTAL_TOKEN_LIMIT ?? 100_000)
       }
     });
+    return;
+  }
+
+  if (request.method === "POST" && request.url === "/api/safety/preview") {
+    try {
+      const payload = SafetyPreviewRequestSchema.parse(await readJson(request));
+      sendJson(response, 200, buildSafetyPreview(payload));
+    } catch (error) {
+      if (error instanceof ZodError) {
+        sendJson(response, 400, {
+          code: "INVALID_REQUEST",
+          message: "The safety preview did not match the expected financial-plan schema.",
+          issuePaths: error.issues.map((issue) => issue.path.join("."))
+        });
+        return;
+      }
+      sendJson(response, 400, { code: "INVALID_JSON", message: "The request body must be valid JSON." });
+    }
     return;
   }
 
@@ -79,6 +99,15 @@ const server = createServer(async (request, response) => {
       const result = await service.advise(payload);
       sendJson(response, 200, result);
     } catch (error) {
+      if (error instanceof UnsafeAgentOutputError) {
+        console.error("Agent response blocked by sensitive-data output scan:", error.categories.join(", "));
+        sendJson(response, 502, {
+          code: "UNSAFE_AGENT_OUTPUT",
+          message: "The agent response was blocked because it contained sensitive data.",
+          categories: error.categories
+        });
+        return;
+      }
       if (error instanceof AgentIncompleteError) {
         console.error("Agent request incomplete:", error.message);
         sendJson(response, 503, {

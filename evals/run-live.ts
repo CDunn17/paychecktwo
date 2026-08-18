@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { analyzeCashflow } from "../src/agent/calculations.js";
 import { actionRequiresApproval } from "../src/agent/recommendation-policy.js";
 import {
+  DisruptionSchema,
   FinancialPlanSchema,
-  RecommendationSchema,
-  type ActionType
+  RecommendationSchema
 } from "../src/agent/schemas.js";
 
 interface EvaluationFixture {
@@ -11,6 +13,8 @@ interface EvaluationFixture {
   message: string;
   expectedTools: string[];
   successCriteria: string[];
+  disruption: unknown;
+  policySources?: unknown[];
 }
 
 interface TraceEntry {
@@ -63,7 +67,6 @@ const plan = FinancialPlanSchema.parse({
 const healthResponse = await fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(5_000) });
 if (!healthResponse.ok) throw new Error(`Agent health check failed with HTTP ${healthResponse.status}.`);
 
-const runId = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
 const results = [];
 
 for (const fixture of fixtures) {
@@ -72,9 +75,12 @@ for (const fixture of fixtures) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      sessionId: `eval-${runId}-${fixture.id}`.slice(0, 64),
+      sessionId: `eval-${randomUUID().replaceAll("-", "")}-${fixture.id}`.slice(0, 64),
       message: fixture.message,
-      plan
+      plan,
+      asOf: "2026-08-17",
+      policySources: fixture.policySources ?? [],
+      privacy: { consentToModel: true, ephemeral: true }
     }),
     signal: AbortSignal.timeout(135_000)
   });
@@ -84,6 +90,7 @@ for (const fixture of fixtures) {
   }
 
   const recommendation = RecommendationSchema.parse(responseBody.recommendation);
+  const expectedAnalysis = analyzeCashflow(plan, "2026-08-17", DisruptionSchema.parse(fixture.disruption));
   const completedTrace = responseBody.trace.filter((entry) => entry.phase === "completed");
   const successfulTools = new Set(
     completedTrace.filter((entry) => !entry.failed && entry.status !== "error").map((entry) => entry.tool)
@@ -91,8 +98,17 @@ for (const fixture of fixtures) {
   const missingTools = fixture.expectedTools.filter((tool) => !successfulTools.has(tool));
   const failedTools = completedTrace.filter((entry) => entry.failed || entry.status === "error").map((entry) => entry.tool);
   const approvalViolations = recommendation.recommendedActions
-    .filter((action) => action.requiresApproval !== actionRequiresApproval(action.actionType as ActionType))
+    .filter((action) => action.requiresApproval !== actionRequiresApproval(action.actionType))
     .map((action) => action.title);
+  const expectedPolicyReview = fixture.expectedTools.includes("review_terms_and_policies");
+  const sourceIds = new Set((fixture.policySources ?? []).map((source) => (source as { id?: string }).id));
+  const policyFindingsGrounded = !expectedPolicyReview || (
+    recommendation.policyFindings.length > 0
+    && recommendation.policyFindings.every((finding) => sourceIds.has(finding.sourceId))
+    && recommendation.policyFindings
+      .filter((finding) => finding.sourceType === "user_reported")
+      .every((finding) => finding.supportLevel === "user_reported" && finding.needsConfirmation && finding.evidenceQuote === null)
+  );
   const automaticChecks = {
     httpSuccess: response.ok,
     expectedToolsUsed: missingTools.length === 0,
@@ -100,6 +116,10 @@ for (const fixture of fixtures) {
     structuredOutputFirstTry: responseBody.metrics?.structuredOutputAttempts === 1
       && responseBody.metrics.structuredOutputFailures === 0,
     verifierApplied: recommendation.verification.checked && recommendation.verification.notes.length > 0,
+    scenarioNumbersGrounded: recommendation.riskLevel === expectedAnalysis.riskLevel
+      && recommendation.safeToSpend === expectedAnalysis.safeToSpend
+      && recommendation.dailyFlexibleLimit === expectedAnalysis.dailyFlexibleLimit,
+    policyFindingsGrounded,
     approvalPolicyCompliant: approvalViolations.length === 0,
     completedWithStructuredOutput: responseBody.stopReason === "toolUse"
   };

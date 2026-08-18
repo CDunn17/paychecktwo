@@ -2,6 +2,7 @@ import { calculatePlan, dateKey, shiftDate, toLocalDate } from "./src/plan.js";
 
 const STORAGE_KEY = "paycheck-two-plan-v1";
 const SESSION_KEY = "paycheck-two-session-v1";
+const KNOWLEDGE_KEY = "paycheck-two-policy-sources-v1";
 const today = new Date();
 
 const seedPlan = {
@@ -19,8 +20,10 @@ const seedPlan = {
 };
 
 let plan = loadPlan();
+let policySources = loadPolicySources();
 let dialogMode = "plan";
-const sessionId = loadSessionId();
+let sessionId = loadSessionId();
+let pendingAgentRequest = null;
 
 const $ = (selector) => document.querySelector(selector);
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -40,13 +43,36 @@ function loadPlan() {
 function loadSessionId() {
   const stored = localStorage.getItem(SESSION_KEY);
   if (stored) return stored;
-  const created = `demo-${crypto.randomUUID()}`;
-  localStorage.setItem(SESSION_KEY, created);
-  return created;
+  return `demo-${crypto.randomUUID()}`;
+}
+
+function loadPolicySources() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(KNOWLEDGE_KEY));
+    if (Array.isArray(stored)) return stored;
+  } catch (error) {
+    console.warn("Could not restore saved policy sources", error);
+  }
+  return [];
 }
 
 function savePlan() {
+  if (isPrivateMode()) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
+}
+
+function savePolicySources() {
+  if (isPrivateMode()) return;
+  localStorage.setItem(KNOWLEDGE_KEY, JSON.stringify(policySources));
+}
+
+function isPrivateMode() {
+  return $("#private-mode")?.checked ?? true;
+}
+
+function updatePrivacyStatus() {
+  const privateMode = isPrivateMode();
+  $("#privacy-status").innerHTML = `<span class="privacy-dot"></span>${privateMode ? "Private mode · not saving new changes" : "Saved on this device"}`;
 }
 
 function iconFor(type) {
@@ -85,6 +111,27 @@ function render() {
 
   renderTimeline(summary);
   renderMove(summary);
+  renderPolicySources();
+}
+
+function renderPolicySources() {
+  const labels = {
+    user_reported: "Remembered",
+    provider_terms: "Provider terms",
+    provider_confirmation: "Confirmed"
+  };
+  $("#knowledge-count").textContent = policySources.length === 0
+    ? "No saved policies"
+    : `${policySources.length} saved ${policySources.length === 1 ? "source" : "sources"}`;
+  $("#knowledge-list").innerHTML = policySources.map((source) => `
+    <li><span>${escapeHtml(source.title)} · ${escapeHtml(labels[source.sourceType] || source.sourceType)}</span><button type="button" data-remove-knowledge="${escapeHtml(source.id)}" aria-label="Remove ${escapeHtml(source.title)}">×</button></li>
+  `).join("");
+  $("#knowledge-list").querySelectorAll("[data-remove-knowledge]").forEach((button) => button.addEventListener("click", () => {
+    policySources = policySources.filter((source) => source.id !== button.dataset.removeKnowledge);
+    savePolicySources();
+    renderPolicySources();
+    showToast("Policy source removed");
+  }));
 }
 
 function renderTimeline(summary) {
@@ -140,17 +187,27 @@ function escapeHtml(value) {
 function openDialog(mode) {
   dialogMode = mode;
   const isBill = mode === "bill";
-  $("#dialog-title").textContent = isBill ? "Add an upcoming bill" : "Update your plan";
-  $("#plan-fields").classList.toggle("hidden", isBill);
+  const isKnowledge = mode === "knowledge";
+  $("#dialog-title").textContent = isBill ? "Add an upcoming bill" : isKnowledge ? "Add policy knowledge or terms" : "Update your plan";
+  $("#plan-fields").classList.toggle("hidden", isBill || isKnowledge);
   $("#bill-fields").classList.toggle("hidden", !isBill);
-  $("#plan-fields").querySelectorAll("input, select").forEach((field) => { field.disabled = isBill; });
-  $("#bill-fields").querySelectorAll("input, select").forEach((field) => { field.disabled = !isBill; });
-  $("#save-button").textContent = isBill ? "Add bill" : "Save plan";
+  $("#knowledge-fields").classList.toggle("hidden", !isKnowledge);
+  $("#plan-fields").querySelectorAll("input, select, textarea").forEach((field) => { field.disabled = isBill || isKnowledge; });
+  $("#bill-fields").querySelectorAll("input, select, textarea").forEach((field) => { field.disabled = !isBill; });
+  $("#knowledge-fields").querySelectorAll("input, select, textarea").forEach((field) => { field.disabled = !isKnowledge; });
+  $("#save-button").textContent = isBill ? "Add bill" : isKnowledge ? "Save source" : "Save plan";
   if (isBill) {
     $("#bill-date-input").value = dateKey(today);
     $("#bill-name-input").value = "";
     $("#bill-amount-input").value = "";
     setTimeout(() => $("#bill-name-input").focus(), 50);
+  } else if (isKnowledge) {
+    $("#knowledge-type-input").value = "user_reported";
+    $("#knowledge-provider-input").value = "";
+    $("#knowledge-title-input").value = "";
+    $("#knowledge-content-input").value = "";
+    $("#knowledge-reference-input").value = "";
+    setTimeout(() => $("#knowledge-provider-input").focus(), 50);
   } else {
     $("#balance-input").value = plan.balance;
     $("#paycheck-input").value = plan.paycheck;
@@ -170,6 +227,23 @@ function handleSave(event) {
     if (!name || !amount || !due) return;
     plan.bills.push({ id: crypto.randomUUID(), name, amount, due, category, icon: billIcon(category) });
     showToast(`${name} added to your timeline`);
+  } else if (dialogMode === "knowledge") {
+    const provider = $("#knowledge-provider-input").value.trim();
+    const title = $("#knowledge-title-input").value.trim();
+    const content = $("#knowledge-content-input").value.trim();
+    if (!provider || !title || !content) return;
+    policySources.push({
+      id: `policy-${crypto.randomUUID()}`,
+      provider,
+      title,
+      content,
+      sourceType: $("#knowledge-type-input").value,
+      sourceReference: $("#knowledge-reference-input").value.trim() || null,
+      effectiveDate: null,
+      lastConfirmedDate: null
+    });
+    savePolicySources();
+    showToast(`${title} saved as policy context`);
   } else {
     plan.balance = Number($("#balance-input").value);
     plan.paycheck = Number($("#paycheck-input").value);
@@ -218,38 +292,116 @@ function renderAgentTrace(trace) {
     simulate_disruption: "Simulated the disruption",
     identify_pressure_points: "Identified the highest-pressure points",
     compare_plan_options: "Compared ways to create breathing room",
+    review_terms_and_policies: "Reviewed saved policy knowledge and terms",
+    evaluate_policy_relief: "Calculated the policy's conditional impact",
     verify_financial_plan: "Independently verified the recommendation"
   };
   $("#agent-trace-list").innerHTML = completed.map((entry) => `<li>${escapeHtml(labels[entry.tool] || entry.tool)}${entry.failed ? " (failed)" : ""}</li>`).join("");
   details.hidden = false;
 }
 
+function renderPolicyFindings(findings) {
+  const details = $("#policy-review");
+  if (!findings?.length) {
+    details.hidden = true;
+    return;
+  }
+  const labels = {
+    user_reported: "User-reported",
+    explicit: "Explicitly supported",
+    ambiguous: "Ambiguous"
+  };
+  $("#policy-review-list").innerHTML = findings.map((finding) => `
+    <li><strong>${escapeHtml(finding.title)}</strong>: ${escapeHtml(finding.finding)} <em>(${escapeHtml(labels[finding.supportLevel] || finding.supportLevel)}${finding.needsConfirmation ? "; confirm details" : ""})</em></li>
+  `).join("");
+  details.hidden = false;
+}
+
+function showLocalCoach(question) {
+  const message = $("#coach-message");
+  message.innerHTML = `<span class="sparkle" aria-hidden="true">✦</span><p>${escapeHtml(coachAnswer(question))}</p>`;
+  message.classList.remove("thinking");
+  $("#agent-status").classList.remove("connected");
+  $("#agent-status").lastChild.textContent = " Local preview";
+}
+
+const safetyCategoryLabels = {
+  aws_access_key: "AWS access key",
+  credential: "Credential or secret",
+  payment_card: "Payment card number",
+  bank_account: "Bank or routing number",
+  social_security_number: "Social Security number",
+  email: "Email address",
+  phone: "Phone number"
+};
+
+function renderSafetyPreview(preview) {
+  $("#safety-destination").textContent = preview.destination;
+  $("#safety-fields-list").innerHTML = preview.fieldsSent.map((field) => `<li>${escapeHtml(field)}</li>`).join("");
+  $("#safety-redactions").innerHTML = preview.redactions.length
+    ? `<ul>${preview.redactions.map((item) => `<li><strong>${item.count}</strong> ${escapeHtml(safetyCategoryLabels[item.category] || item.category)} ${item.count === 1 ? "value" : "values"} will be masked</li>`).join("")}</ul>`
+    : "<p>No high-confidence identifiers detected.</p>";
+  $("#model-consent").checked = false;
+  $("#send-safely-button").disabled = true;
+}
+
 async function askCoach(question) {
   if (!question.trim()) return;
+  const request = { sessionId, message: question, plan, policySources };
+  try {
+    const response = await fetch("/api/safety/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request)
+    });
+    if (!response.ok) throw new Error("Safety preview unavailable");
+    renderSafetyPreview(await response.json());
+    pendingAgentRequest = request;
+    $("#safety-dialog").showModal();
+  } catch {
+    showLocalCoach(question);
+    showToast("Agent offline — no information was sent");
+  }
+}
+
+async function sendAgentRequest(request) {
   const message = $("#coach-message");
   message.classList.add("thinking");
   message.innerHTML = '<span class="sparkle" aria-hidden="true">✦</span><p>Working that into your plan…</p>';
   $("#agent-trace").hidden = true;
+  $("#policy-review").hidden = true;
   try {
     const response = await fetch("/api/agent", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sessionId, message: question, plan })
+      body: JSON.stringify({
+        ...request,
+        privacy: { consentToModel: true, ephemeral: isPrivateMode() }
+      })
     });
-    if (!response.ok) throw new Error("Agent unavailable");
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      if (errorBody.code === "UNSAFE_AGENT_OUTPUT") {
+        message.innerHTML = '<span class="sparkle" aria-hidden="true">✦</span><p>The model response was blocked because the safety check found sensitive information. No model answer was shown.</p>';
+        message.classList.remove("thinking");
+        showToast("Sensitive model output blocked");
+        return;
+      }
+      throw new Error("Agent unavailable");
+    }
     const result = await response.json();
     const recommendation = result.recommendation;
     const action = recommendation.recommendedActions?.[0];
     const actionText = action ? ` ${action.title}: ${action.rationale}` : "";
     message.innerHTML = `<span class="sparkle" aria-hidden="true">✦</span><p>${escapeHtml(recommendation.summary + actionText)}</p>`;
     renderAgentTrace(result.trace || []);
+    renderPolicyFindings(recommendation.policyFindings || []);
     message.classList.remove("thinking");
+    const redactionCount = (result.safety?.inputRedactions || []).reduce((total, item) => total + item.count, 0);
+    if (redactionCount > 0) showToast(`${redactionCount} sensitive ${redactionCount === 1 ? "value was" : "values were"} masked before Bedrock`);
   } catch {
     await new Promise((resolve) => setTimeout(resolve, 320));
-    message.innerHTML = `<span class="sparkle" aria-hidden="true">✦</span><p>${escapeHtml(coachAnswer(question))}</p>`;
-    message.classList.remove("thinking");
-    $("#agent-status").classList.remove("connected");
-    $("#agent-status").lastChild.textContent = " Local preview";
+    showLocalCoach(request.message);
   }
 }
 
@@ -276,9 +428,49 @@ function showToast(message) {
 $("#settings-button").addEventListener("click", () => openDialog("plan"));
 $("#balance-button").addEventListener("click", () => openDialog("plan"));
 $("#add-bill-button").addEventListener("click", () => openDialog("bill"));
+$("#add-knowledge-button").addEventListener("click", () => openDialog("knowledge"));
 $("#plan-form").addEventListener("submit", handleSave);
 $("#close-dialog-button").addEventListener("click", () => $("#plan-dialog").close());
 $("#cancel-dialog-button").addEventListener("click", () => $("#plan-dialog").close());
+$("#private-mode").addEventListener("change", () => {
+  if (!isPrivateMode()) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
+    localStorage.setItem(KNOWLEDGE_KEY, JSON.stringify(policySources));
+    localStorage.setItem(SESSION_KEY, sessionId);
+    showToast("New changes will be saved on this device");
+  } else {
+    showToast("Private mode is on; existing saved data remains until deleted");
+  }
+  updatePrivacyStatus();
+});
+$("#delete-local-data-button").addEventListener("click", () => {
+  if (!window.confirm("Delete the plan, policy sources, and saved session ID from this browser?")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(KNOWLEDGE_KEY);
+  localStorage.removeItem(SESSION_KEY);
+  plan = structuredClone(seedPlan);
+  policySources = [];
+  sessionId = `demo-${crypto.randomUUID()}`;
+  render();
+  showToast("Local Paycheck Two data deleted");
+});
+$("#model-consent").addEventListener("change", () => {
+  $("#send-safely-button").disabled = !$("#model-consent").checked;
+});
+$("#safety-consent-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!pendingAgentRequest || !$("#model-consent").checked) return;
+  const request = pendingAgentRequest;
+  pendingAgentRequest = null;
+  $("#safety-dialog").close();
+  sendAgentRequest(request);
+});
+const cancelSafetyDialog = () => {
+  pendingAgentRequest = null;
+  $("#safety-dialog").close();
+};
+$("#close-safety-dialog-button").addEventListener("click", cancelSafetyDialog);
+$("#cancel-safety-dialog-button").addEventListener("click", cancelSafetyDialog);
 $("#ask-form").addEventListener("submit", (event) => {
   event.preventDefault();
   askCoach($("#ask-input").value);
@@ -288,4 +480,5 @@ document.querySelectorAll("[data-prompt]").forEach((button) => button.addEventLi
 $("#try-move-button").addEventListener("click", () => askCoach("Help me find $50"));
 
 render();
+updatePrivacyStatus();
 checkAgentStatus();
