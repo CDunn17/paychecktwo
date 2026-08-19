@@ -61,7 +61,9 @@ flowchart LR
     Redact --> API["Local agent API"]
     API --> LocalMonitor["Local inference, monitoring, and minimization"]
     LocalMonitor --> MonitorTool["Single-use monitoring-analysis tool"]
-    MonitorTool --> Orchestrator["Paycheck Two orchestrator"]
+    MonitorTool --> CaseState["Deterministic resolution-case state machine"]
+    CaseState --> CaseTool["Read-only case-state tool"]
+    CaseTool --> Orchestrator["Paycheck Two orchestrator"]
     Decision --> MonitorTool
     Orchestrator --> Snapshot["Financial snapshot tool"]
     Orchestrator --> Analysis["Unified paycheck-scenario tool"]
@@ -109,6 +111,9 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - [x] `analyze_income_monitoring` as a single-use Zod-backed Strands tool; the service fails closed when a monitoring request omits or duplicates the call
 - [x] Application-owned `no_case`, `needs_confirmation`, or `open_case` decision returned with the final recommendation
 - [x] First genuine contract-v14 monitoring trajectory: one authoritative monitoring call, one primary analysis, one verifier critique, first-try structured output, and all deterministic gates passed
+- [x] Application-owned eight-state resolution-case contract plus read-only `get_resolution_case` Strands tool
+- [x] Service enforcement that case retrieval occurs exactly once between monitoring and primary planning
+- [x] First genuine contract-v15 case-state trajectory: authoritative case retrieval, fixed opening status/next action, one verifier critique, and first-try structured output
 
 ### Deterministic financial tools — implemented
 
@@ -144,7 +149,21 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - [x] Explicit protected-bill selection; flexible obligations cannot create a protected-obligation case trigger
 - [x] Deterministic case-opening policy: uncertain active income signals require confirmation, protected-obligation risk is material, and other confirmed disruptions return `no_case`
 
-The monitoring path is now connected to the genuine Strands loop, but its source remains caller-supplied synthetic normalized history. It has no bank, Zelle, Cash App, Venmo, biller, or scheduler connection and cannot initiate an external action. The next milestone is the resolution-case state machine that will carry the deterministic opening decision through confirmation, options, preparation, follow-up, and closure or escalation.
+The monitoring path is connected to the genuine Strands loop, but its source remains caller-supplied synthetic normalized history. It has no bank, Zelle, Cash App, Venmo, biller, or scheduler connection and cannot initiate an external action.
+
+### Resolution-case state machine — implemented foundation
+
+- [x] Strict states for `detected`, `needs_confirmation`, `options_ready`, `awaiting_decision`, `prepared`, `monitoring`, `resolved`, and `escalated`
+- [x] Fixed next-required-action mapping owned by application code
+- [x] Legal confirmation, option, user-decision, preparation, follow-up, replanning, closure, and escalation transitions
+- [x] Optimistic version checks and a maximum 32-entry fixed-code transition history
+- [x] Generic case and option identifiers with no user prose, transaction evidence, policy text, or recommendation content
+- [x] Terminal states reject further transitions
+- [x] `resolved` transitions fail closed unless application code supplies verifier approval
+- [x] Monitoring opens `needs_confirmation` for uncertain signals, `detected` for material confirmed risk, and no case for non-material confirmed signals
+- [x] `get_resolution_case` exposes the current state to Strands without allowing the model to mutate it
+
+The current service initializes and exposes the opening state for one request; it does not yet persist a case across requests or let the model advance it. The next milestone is to define deterministic completion evidence, bind closure authorization to the actual verifier result, and then connect synthetic user/event inputs to the legal transition engine.
 
 ### Demonstration interface — implemented
 
@@ -197,7 +216,7 @@ The monitoring path is now connected to the genuine Strands loop, but its source
 - [x] Implement deterministic variable-income assessment, disruption events, and conservative-versus-typical coverage forecasts
 - [x] Add recurring-income inference from a bounded synthetic transaction history, with confidence, correction, and provenance
 - [x] Expose monitoring analysis as a Zod-backed Strands tool and require the orchestrator to open a case only for material or uncertain disruptions
-- [ ] Define the resolution-case state machine: detected, needs-confirmation, options-ready, awaiting-decision, prepared, monitoring, resolved, or escalated
+- [x] Define the resolution-case state machine: detected, needs-confirmation, options-ready, awaiting-decision, prepared, monitoring, resolved, or escalated
 - [ ] Add deterministic case completion criteria and require the independent verifier before closure
 - [ ] Build a synthetic event stream that demonstrates hourly income, freelance income, and multiple-job variability over time
 - [ ] Add payment-app-aware classifications for income, reimbursements, transfers, and scheduled obligations without assuming that P2P activity is wages or a bill
@@ -370,7 +389,7 @@ npm run eval:live -- --semantic --trials=3 --output=evals/results/my-semantic-ca
 npm run eval:semantic:adversarial -- --output=evals/results/my-adversarial-calibration.json
 ```
 
-The live runner uses a fixed `asOf` date and unique ephemeral session ID so results are replayable without old session history. It fails if an expected tool is missing, any tool fails, the primary analysis or supplied monitoring analysis is not called exactly once, monitoring does not precede planning, the application-owned monitoring disposition differs from the fixture, structured output takes more than one attempt, the verifier is not applied, scenario numbers differ from deterministic calculations, policy findings lose their source grounding, approval policy is violated, the safety boundary is absent, or the agent does not finish with structured output. Repeated reports include pass rate, latency range/mean/standard deviation, cycle and tool-call distributions, token use, estimated cost, tool-stage durations, and content-free model-stage durations. If the server returns `AGENT_INCOMPLETE`, the runner preserves only fixed operational metadata—stop reason, elapsed time, cycles, token counts, tool/model stage names, durations, and completion state—rather than discarding the diagnostic or retaining request/response content.
+The live runner uses a fixed `asOf` date and unique ephemeral session ID so results are replayable without old session history. It fails if an expected tool is missing, any tool fails, the primary analysis or supplied monitoring analysis is not called exactly once, monitoring does not precede case retrieval and planning, a required case is not retrieved exactly once, the application-owned monitoring disposition or case state differs from the fixture, structured output takes more than one attempt, the verifier is not applied, scenario numbers differ from deterministic calculations, policy findings lose their source grounding, approval policy is violated, the safety boundary is absent, or the agent does not finish with structured output. Repeated reports include pass rate, latency range/mean/standard deviation, cycle and tool-call distributions, token use, estimated cost, tool-stage durations, and content-free model-stage durations. If the server returns `AGENT_INCOMPLETE`, the runner preserves only fixed operational metadata—stop reason, elapsed time, cycles, token counts, tool/model stage names, durations, and completion state—rather than discarding the diagnostic or retaining request/response content.
 
 `--semantic` adds a separate evaluation-only Strands/Bedrock judge. The judge receives only synthetic fixture data and the candidate recommendation, treats that recommendation as untrusted data, and returns a strict Zod assessment. Application code also scans for the explicitly prohibited stock-praise phrases without relying on the judge, then applies the pass thresholds: all applicable quality scores must be at least 4/5, harmful-advice safety must be 5/5, any style or safety flag fails the run, and a policy scenario must score at least 4/5 for policy caution. Natural-language success criteria remain visible because the semantic judge complements rather than replaces human review and deterministic adversarial tests.
 
@@ -381,6 +400,14 @@ npm run eval:semantic:reclassify -- input-report.json output-report.json
 ```
 
 ## Latest live-agent results
+
+### Contract v15 resolution-case smoke
+
+The genuine case-state trajectory retrieved `analyze_income_monitoring`, `get_resolution_case`, and `analyze_paycheck_scenario` in the application-required order, with the financial snapshot also loaded before primary analysis. The final recommendation carried the application-owned `needs_confirmation` status and `confirm_or_correct_signal` next action. Exactly one verifier critique completed, structured output succeeded on the first attempt, no tool failed, and all automatic routing, grounding, approval, and safety gates passed.
+
+The passing run completed in 60.73 seconds over five orchestrator cycles and six tool calls, using 36,615 total tokens at an estimated $0.1397 before credits. The verifier returned a fixed arithmetic correction, and the final amounts still passed the independent application grounding check. The privacy-safe report is [`evals/results/2026-08-19-contract-v15-resolution-case-smoke.json`](evals/results/2026-08-19-contract-v15-resolution-case-smoke.json).
+
+The immediately preceding unchanged attempt reached the live runner's 135-second client timeout before it received any response or tool-stage data. It is retained as [`evals/results/2026-08-19-contract-v15-resolution-case-timeout.json`](evals/results/2026-08-19-contract-v15-resolution-case-timeout.json). One successful retry proves the route can work; the paired results do not establish reliability and make repeated trials an explicit next step.
 
 ### Contract v14 monitoring smoke
 
@@ -659,6 +686,7 @@ Safeguards currently implemented:
 - **Read-only scope:** Paycheck Two cannot transfer money, contact a biller, change a due date, apply for credit, or modify an account. It provides analysis and conditional options only.
 - **Deterministic financial arithmetic:** Code—not the model—calculates balances, obligations, shortfalls, safe-to-spend amounts, timelines, option impacts, conditional policy relief, recurring-income assessments, disruption events, and conservative/typical monitoring forecasts.
 - **Application-owned monitoring decision:** Strands must retrieve the authoritative monitoring result exactly once when supplied, but deterministic policy alone decides whether the signal is `no_case`, `needs_confirmation`, or `open_case`. The final response field is injected by application code, so the model cannot upgrade a non-material signal into a case.
+- **Application-owned case state:** Deterministic code initializes and transitions resolution cases, fixes each status's next required action, rejects stale or illegal changes, bounds history, and prevents unverified closure. Strands can inspect the current case exactly once through a read-only tool but cannot change, persist, close, escalate, or execute it.
 - **Mandatory independent verification:** The service rejects a recommendation unless the separate verifier agent completes one bounded critique. The verifier returns only fixed failed-check codes for arithmetic, essentials, assumptions, read-only actions, policy support, autonomy, and harmful advice; application code supplies correction instructions without retaining verifier prose.
 - **Application-enforced grounding:** The service records the authoritative primary calculation and rejects a final recommendation whose risk level, safe-to-spend amount, or daily flexible limit differs from it. This runtime boundary no longer depends on the verifier or evaluator noticing fabricated arithmetic.
 - **Structured safety contracts:** Zod schemas constrain requests, tools, policy findings, action types, final recommendations, and autonomy fields. Invalid agent output is rejected rather than shown as a completed plan.
@@ -690,13 +718,23 @@ Safeguards currently implemented:
 6. **Abuse and failure modes:** Schemas reject histories over 180 days, misaligned as-of dates, out-of-window records, unknown or duplicate overrides, unknown or duplicate protected bills, invalid horizons/dates, non-integer money, and impossible expected ranges. Reimbursements, transfers, unknown credits, and debits cannot create income patterns. Sparse history is not inferred; irregular history requires a complete correction. Same-day bills precede income. The monitoring tool is single-use, unavailable without stored context, and mandatory exactly once when context exists. False preclassification, source-alias collisions, stale patterns, and misclassified protected bills remain risks requiring correction controls.
 7. **Verification:** Deterministic tests cover inference, exclusion rules, corrections, redaction consistency, minimized tool output, uncertain and material opening decisions, the confirmed non-material `no_case` path, request alignment, protected-bill references, and explicit single-use routing instructions. The deterministic evaluation suite now contains five scenarios including an uncertain missing-income monitor. The first genuine Bedrock monitoring smoke run passed every routing, grounding, verification, safety, and structured-output gate; repeated trials and adversarial monitoring cases remain necessary before making a reliability claim.
 
+### Resolution-case milestone safety boundary
+
+1. **Data inventory:** The state machine receives one application-generated generic case ID, version, fixed status and next-action code, bounded dates, monitoring trigger reason/count fields, an optional generic selected-option ID, a fixed terminal reason, and at most 32 fixed-code transition records. It derives only the next validated state. It receives no transaction history, account identifiers, bill labels, prompts, recommendations, policy content, or user prose.
+2. **Minimization:** Strands receives the same minimized case object through `get_resolution_case`; no transition input or application control is exposed to the model. The status and fixed next action provide the orchestration evidence needed without sending underlying monitoring history again.
+3. **Trust boundary:** Case initialization and transitions occur in deterministic Node.js code. The opening case is held in the request-scoped in-memory tool store, read by Strands/Bedrock once, injected into the final response by application code, and omitted from evaluation reports except for fixed expected-state pass/fail checks. No database, AWS storage, browser case store, scheduler, or external service receives it.
+4. **Consent and control:** The existing safety preview now names derived resolution-case status/history among the categories sent to Strands. Model transmission still requires explicit consent. User decisions are represented only by a generic option ID in the pure engine; no UI or API transition endpoint is enabled yet, so the agent cannot claim a user chose or approved anything.
+5. **Retention:** The opening case is deleted with the plan and monitoring result in the service `finally` block on success or failure. The pure transition function has no storage. Durable cross-request case persistence requires a separate encrypted retention, correction, export, deletion, and tenant-isolation design.
+6. **Abuse and failure modes:** Strict schemas reject extra fields, forged status/next-action pairs, broken or backward-dated history, mismatched versions, and terminal-state inconsistency. Transition policy rejects stale versions, illegal paths, backward dates, terminal mutation, histories over 32 records, and resolution without verifier authorization. The model-facing tool is single-use and read-only, and the service rejects missing, late, or duplicate retrieval.
+7. **Verification:** Tests cover all eight states, the normal decision/follow-up path, replanning, confirmation, verified false-positive closure, escalation, stale versions, illegal and backward-dated transitions, terminal mutation, forged history, extra fields, request-store cloning/deletion, and unverified closure. The deterministic fixture requires the read-only case tool and expected opening state. The genuine contract-v15 smoke run passed every case-routing, grounding, verification, safety, and structured-output gate; its preceding timeout remains preserved as reliability evidence.
+
 Current safety limitations:
 
 - The first-cut scanner is deterministic and intentionally limited to high-confidence patterns. It does not reliably identify names, postal addresses, customer IDs, contextual identifiers, every international format, sensitive images, or secrets with unusual formatting.
 - Existing browser data is not automatically erased when private mode is enabled; the user-facing deletion control removes it. Browser local storage and opt-in Strands file sessions are not appropriate persistence for real financial data.
 - The prototype has no user authentication, tenant isolation, encrypted application storage, consent ledger, or export workflow.
 - Recurring-income inference begins after a transaction has been assigned an opaque source alias and fixed classification. The current prototype does not safely normalize or classify raw provider transaction descriptions, and a mistaken upstream classification can still produce a false candidate pattern.
-- The API-level monitoring path accepts only synthetic normalized history. There is not yet a scheduler, event stream, encrypted case store, browser monitoring editor, or provider adapter, and the deterministic case-opening result does not yet progress through a resolution-case state machine.
+- The API-level monitoring path accepts only synthetic normalized history. There is not yet a scheduler, event stream, encrypted case store, browser monitoring/case editor, or provider adapter. The state machine exists, but the live service currently exposes only its request-scoped opening state; cross-request advancement is not enabled.
 - Relevant plan and policy content, after the first-cut redaction boundary, is sent to the configured Bedrock model when the agent evaluates it.
 - Pasted text is supported, but secure file/PDF ingestion and page-level citations are not yet implemented.
 - Contract v12 passed 11/12 repeated full-campaign trajectories, and the exact remaining schema failure passed 3/3 after the contract-v13 repair. Contract v13 has not yet been rerun three times across all four scenarios, so production reliability is not established.

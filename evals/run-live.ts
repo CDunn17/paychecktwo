@@ -30,6 +30,7 @@ interface EvaluationFixture {
   policySources?: unknown[];
   monitoring?: unknown;
   expectedMonitoringDisposition?: "no_case" | "needs_confirmation" | "open_case";
+  expectedResolutionCaseStatus?: "detected" | "needs_confirmation";
 }
 
 interface TraceEntry {
@@ -323,6 +324,18 @@ for (const fixture of fixtures) {
   const primaryAnalysisIndex = completedTrace.findIndex(
     (entry) => entry.tool === "analyze_paycheck_scenario" && !entry.failed && entry.status !== "error"
   );
+  const resolutionCaseCalls = completedTrace.filter(
+    (entry) => entry.tool === "get_resolution_case" && !entry.failed && entry.status !== "error"
+  ).length;
+  const resolutionCaseIndex = completedTrace.findIndex(
+    (entry) => entry.tool === "get_resolution_case" && !entry.failed && entry.status !== "error"
+  );
+  const expectsResolutionCase = fixture.expectedResolutionCaseStatus !== undefined;
+  const expectedResolutionNextAction = fixture.expectedResolutionCaseStatus === "needs_confirmation"
+    ? "confirm_or_correct_signal"
+    : fixture.expectedResolutionCaseStatus === "detected"
+      ? "calculate_options"
+      : null;
   const missingTools = fixture.expectedTools.filter((tool) => !successfulTools.has(tool));
   const failedTools = completedTrace.filter((entry) => entry.failed || entry.status === "error").map((entry) => entry.tool);
   const approvalViolations = recommendation.recommendedActions
@@ -345,9 +358,18 @@ for (const fixture of fixtures) {
     monitoringPrecedesPlanning: fixture.monitoring
       ? monitoringAnalysisIndex >= 0 && monitoringAnalysisIndex < primaryAnalysisIndex
       : true,
+    resolutionCaseRoutingCorrect: expectsResolutionCase ? resolutionCaseCalls === 1 : resolutionCaseCalls === 0,
+    resolutionCaseOrderCorrect: expectsResolutionCase
+      ? monitoringAnalysisIndex < resolutionCaseIndex && resolutionCaseIndex < primaryAnalysisIndex
+      : true,
     monitoringDecisionGrounded: fixture.monitoring
       ? recommendation.monitoringDecision?.disposition === fixture.expectedMonitoringDisposition
       : recommendation.monitoringDecision === null,
+    resolutionCaseGrounded: expectsResolutionCase
+      ? recommendation.resolutionCase !== null
+        && recommendation.resolutionCase.status === fixture.expectedResolutionCaseStatus
+        && recommendation.resolutionCase.nextRequiredAction === expectedResolutionNextAction
+      : recommendation.resolutionCase === null,
     noToolFailures: failedTools.length === 0,
     structuredOutputFirstTry: responseBody.metrics?.structuredOutputAttempts === 1
       && responseBody.metrics.structuredOutputFailures === 0,

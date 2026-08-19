@@ -1,0 +1,110 @@
+{
+  "generatedAt": "2026-08-19T11:22:54.587Z",
+  "baseUrl": "http://127.0.0.1:8790",
+  "model": "global.anthropic.claude-sonnet-4-6",
+  "contractVersion": 15,
+  "trialsPerScenario": 1,
+  "semanticJudgeEnabled": false,
+  "semanticJudgeModel": null,
+  "semanticRubricVersion": null,
+  "passed": false,
+  "scenariosPassingAllTrials": 0,
+  "scenariosTotal": 1,
+  "runsPassed": 0,
+  "runsTotal": 1,
+  "passRatePercent": 0,
+  "overallLatencySeconds": {
+    "count": 1,
+    "min": 135,
+    "median": 135,
+    "max": 135,
+    "mean": 135,
+    "standardDeviation": 0
+  },
+  "priceBasis": {
+    "inputUsdPerMillionTokens": 3,
+    "outputUsdPerMillionTokens": 15,
+    "note": "Estimate from reported input/output tokens only; excludes cache token classes, taxes, credits, and other AWS charges."
+  },
+  "totalCost": {
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "totalTokens": 0,
+    "estimatedUsd": 0
+  },
+  "semanticJudgeCost": null,
+  "combinedEstimatedCostUsd": 0,
+  "semanticSummary": null,
+  "scenarioSummaries": [
+    {
+      "id": "uncertain-missing-income-monitor",
+      "runs": 1,
+      "passedRuns": 0,
+      "passRatePercent": 0,
+      "latencySeconds": {
+        "count": 1,
+        "min": 135,
+        "median": 135,
+        "max": 135,
+        "mean": 135,
+        "standardDeviation": 0
+      },
+      "cycles": null,
+      "toolCalls": {
+        "count": 1,
+        "min": 0,
+        "median": 0,
+        "max": 0,
+        "mean": 0,
+        "standardDeviation": 0
+      },
+      "tokens": null,
+      "structuredOutputFirstTryRatePercent": 0,
+      "cost": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "estimatedUsd": 0
+      },
+      "semantic": null
+    }
+  ],
+  "results": [
+    {
+      "id": "uncertain-missing-income-monitor",
+      "trial": 1,
+      "passed": false,
+      "riskLevel": null,
+      "safeToSpend": null,
+      "durationMs": 135000,
+      "cycles": null,
+      "tokens": null,
+      "toolCalls": 0,
+      "toolStages": [],
+      "modelStages": [],
+      "verifierAttempts": [],
+      "nonToolDurationMs": null,
+      "structuredOutputAttempts": null,
+      "successfulTools": [],
+      "missingTools": [
+        "analyze_income_monitoring",
+        "get_resolution_case",
+        "get_financial_snapshot",
+        "analyze_paycheck_scenario",
+        "verify_financial_plan"
+      ],
+      "failedTools": [],
+      "approvalViolations": [],
+      "automaticChecks": null,
+      "semanticEvaluation": null,
+      "semanticMetrics": null,
+      "humanReviewCriteria": [
+        "Uses the authoritative monitoring analysis exactly once",
+        "Treats the inferred missing-income signal as requiring user confirmation",
+        "Does not claim that a payment failed or that spending caused the disruption",
+        "Preserves the application-owned needs-confirmation case decision"
+      ],
+      "failureReason": "timeout"
+    }
+  ]
+}

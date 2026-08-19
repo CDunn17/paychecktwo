@@ -24,6 +24,7 @@ export function createFinancialTools(
   observer: FinancialToolObserver = {}
 ) {
   let monitoringAnalysisCalls = 0;
+  let resolutionCaseCalls = 0;
   const getFinancialSnapshot = tool({
     name: "get_financial_snapshot",
     description: "Load the authoritative balance, paycheck, buffer, payday, and bills for a Paycheck Two session. Always call this before analysis.",
@@ -57,6 +58,19 @@ export function createFinancialTools(
       const result = planStore.getMonitoringResult(sessionId);
       observer.onMonitoringAnalysis?.();
       return result;
+    }
+  });
+
+  const getResolutionCase = tool({
+    name: "get_resolution_case",
+    description: "Load the one authoritative, application-owned resolution-case state for this request. Call exactly once after analyze_income_monitoring and before planning only when the request says a resolution case is available. This tool is read-only: it cannot advance a status, execute an action, or close a case.",
+    inputSchema: SessionInput,
+    callback: ({ sessionId }) => {
+      if (resolutionCaseCalls >= 1) {
+        throw new Error("The authoritative resolution case has already been retrieved for this request.");
+      }
+      resolutionCaseCalls += 1;
+      return planStore.getResolutionCase(sessionId);
     }
   });
 
@@ -109,6 +123,7 @@ export function createFinancialTools(
   return [
     getFinancialSnapshot,
     analyzeIncomeMonitoring,
+    getResolutionCase,
     analyzePaycheckScenario,
     identifyPressurePoints,
     comparePlanOptions,

@@ -238,6 +238,234 @@ export const MonitoringCaseDecisionSchema = z.object({
   }
 });
 
+export const ResolutionCaseStatusSchema = z.enum([
+  "detected",
+  "needs_confirmation",
+  "options_ready",
+  "awaiting_decision",
+  "prepared",
+  "monitoring",
+  "resolved",
+  "escalated"
+]);
+
+export const ResolutionCaseNextActionSchema = z.enum([
+  "confirm_or_correct_signal",
+  "calculate_options",
+  "present_tradeoffs",
+  "wait_for_user_choice",
+  "begin_follow_up",
+  "observe_outcome",
+  "none"
+]);
+
+export const ResolutionCaseEventTypeSchema = z.enum([
+  "case_opened",
+  "signal_confirmed",
+  "signal_rejected",
+  "options_calculated",
+  "options_presented",
+  "decision_recorded",
+  "follow_up_started",
+  "outcome_requires_replan",
+  "confirmation_required",
+  "outcome_verified",
+  "escalation_required"
+]);
+
+export const ResolutionCaseTerminalReasonSchema = z.enum([
+  "false_positive_verified",
+  "risk_cleared_verified",
+  "user_outcome_verified",
+  "risk_worsened",
+  "deadline_missed",
+  "required_service_unavailable",
+  "outside_agent_scope"
+]);
+
+export const ResolutionCaseDateSchema = IsoDateSchema.refine((value) => {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}, "Use a valid calendar date in YYYY-MM-DD format");
+
+export const ResolutionCaseTransitionRecordSchema = z.object({
+  fromStatus: ResolutionCaseStatusSchema.nullable(),
+  toStatus: ResolutionCaseStatusSchema,
+  eventType: ResolutionCaseEventTypeSchema,
+  occurredOn: ResolutionCaseDateSchema
+}).strict();
+
+const NEXT_ACTION_BY_CASE_STATUS = {
+  detected: "calculate_options",
+  needs_confirmation: "confirm_or_correct_signal",
+  options_ready: "present_tradeoffs",
+  awaiting_decision: "wait_for_user_choice",
+  prepared: "begin_follow_up",
+  monitoring: "observe_outcome",
+  resolved: "none",
+  escalated: "none"
+} as const;
+
+const LEGAL_CASE_TRANSITIONS = new Set([
+  "null:case_opened:detected",
+  "null:case_opened:needs_confirmation",
+  "needs_confirmation:signal_confirmed:detected",
+  "needs_confirmation:signal_rejected:resolved",
+  "needs_confirmation:escalation_required:escalated",
+  "detected:options_calculated:options_ready",
+  "detected:confirmation_required:needs_confirmation",
+  "detected:escalation_required:escalated",
+  "options_ready:options_presented:awaiting_decision",
+  "options_ready:outcome_requires_replan:detected",
+  "options_ready:confirmation_required:needs_confirmation",
+  "options_ready:escalation_required:escalated",
+  "awaiting_decision:decision_recorded:prepared",
+  "awaiting_decision:outcome_requires_replan:detected",
+  "awaiting_decision:confirmation_required:needs_confirmation",
+  "awaiting_decision:escalation_required:escalated",
+  "prepared:follow_up_started:monitoring",
+  "prepared:outcome_requires_replan:detected",
+  "prepared:confirmation_required:needs_confirmation",
+  "prepared:escalation_required:escalated",
+  "monitoring:outcome_requires_replan:detected",
+  "monitoring:confirmation_required:needs_confirmation",
+  "monitoring:outcome_verified:resolved",
+  "monitoring:escalation_required:escalated"
+]);
+
+export const ResolutionCaseSchema = z.object({
+  caseId: z.string().regex(/^case-[a-z0-9-]{1,64}$/),
+  version: z.number().int().positive(),
+  status: ResolutionCaseStatusSchema,
+  nextRequiredAction: ResolutionCaseNextActionSchema,
+  openedOn: ResolutionCaseDateSchema,
+  updatedOn: ResolutionCaseDateSchema,
+  trigger: z.object({
+    reasonCodes: z.array(z.enum([
+      "unconfirmed_income_signal",
+      "protected_obligation_risk"
+    ])).min(1).max(2),
+    activeDisruptionCount: z.number().int().nonnegative(),
+    uncertainDisruptionCount: z.number().int().nonnegative(),
+    protectedObligationRiskCount: z.number().int().nonnegative()
+  }).strict(),
+  selectedOptionId: z.string().regex(/^option-[a-z0-9-]{1,64}$/).nullable(),
+  terminalReason: ResolutionCaseTerminalReasonSchema.nullable(),
+  transitionHistory: z.array(ResolutionCaseTransitionRecordSchema).min(1).max(32)
+}).strict().superRefine((resolutionCase, context) => {
+  if (resolutionCase.updatedOn < resolutionCase.openedOn) {
+    context.addIssue({
+      code: "custom",
+      path: ["updatedOn"],
+      message: "A resolution case cannot be updated before it opens."
+    });
+  }
+  if (resolutionCase.nextRequiredAction !== NEXT_ACTION_BY_CASE_STATUS[resolutionCase.status]) {
+    context.addIssue({
+      code: "custom",
+      path: ["nextRequiredAction"],
+      message: "The next required action must match the application-owned case status."
+    });
+  }
+  const lastTransition = resolutionCase.transitionHistory.at(-1);
+  if (lastTransition?.toStatus !== resolutionCase.status) {
+    context.addIssue({
+      code: "custom",
+      path: ["transitionHistory"],
+      message: "The final transition must match the current case status."
+    });
+  }
+  const firstTransition = resolutionCase.transitionHistory[0];
+  if (firstTransition?.fromStatus !== null
+    || firstTransition?.eventType !== "case_opened"
+    || firstTransition?.occurredOn !== resolutionCase.openedOn) {
+    context.addIssue({
+      code: "custom",
+      path: ["transitionHistory", 0],
+      message: "A case history must begin with its application-owned opening transition."
+    });
+  }
+  if (resolutionCase.version !== resolutionCase.transitionHistory.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["version"],
+      message: "The case version must equal its bounded transition count."
+    });
+  }
+  resolutionCase.transitionHistory.forEach((transition, index) => {
+    const previous = resolutionCase.transitionHistory[index - 1];
+    if (previous && transition.fromStatus !== previous.toStatus) {
+      context.addIssue({
+        code: "custom",
+        path: ["transitionHistory", index, "fromStatus"],
+        message: "Every case transition must continue from the prior state."
+      });
+    }
+    if (previous && transition.occurredOn < previous.occurredOn) {
+      context.addIssue({
+        code: "custom",
+        path: ["transitionHistory", index, "occurredOn"],
+        message: "Case transitions must be ordered by date."
+      });
+    }
+    const transitionKey = `${transition.fromStatus ?? "null"}:${transition.eventType}:${transition.toStatus}`;
+    if (!LEGAL_CASE_TRANSITIONS.has(transitionKey)) {
+      context.addIssue({
+        code: "custom",
+        path: ["transitionHistory", index],
+        message: "The case history contains an illegal state transition."
+      });
+    }
+  });
+  if (lastTransition?.occurredOn !== resolutionCase.updatedOn) {
+    context.addIssue({
+      code: "custom",
+      path: ["updatedOn"],
+      message: "The case update date must match its latest transition."
+    });
+  }
+  const isTerminal = resolutionCase.status === "resolved" || resolutionCase.status === "escalated";
+  if (isTerminal !== (resolutionCase.terminalReason !== null)) {
+    context.addIssue({
+      code: "custom",
+      path: ["terminalReason"],
+      message: "Only a terminal case may have a terminal reason, and every terminal case requires one."
+    });
+  }
+  if (lastTransition?.eventType === "signal_rejected"
+    && resolutionCase.terminalReason !== "false_positive_verified") {
+    context.addIssue({
+      code: "custom",
+      path: ["terminalReason"],
+      message: "A rejected signal requires the fixed verified false-positive reason."
+    });
+  }
+  if (lastTransition?.eventType === "outcome_verified"
+    && !["risk_cleared_verified", "user_outcome_verified"].includes(resolutionCase.terminalReason ?? "")) {
+    context.addIssue({
+      code: "custom",
+      path: ["terminalReason"],
+      message: "A verified outcome requires a fixed verified resolution reason."
+    });
+  }
+  if (resolutionCase.selectedOptionId !== null
+    && !["prepared", "monitoring", "resolved", "escalated"].includes(resolutionCase.status)) {
+    context.addIssue({
+      code: "custom",
+      path: ["selectedOptionId"],
+      message: "An option can be recorded only after the user decision state."
+    });
+  }
+  if (resolutionCase.selectedOptionId !== null
+    && !resolutionCase.transitionHistory.some(({ eventType }) => eventType === "decision_recorded")) {
+    context.addIssue({
+      code: "custom",
+      path: ["selectedOptionId"],
+      message: "A selected option requires a recorded user-decision transition."
+    });
+  }
+});
+
 const RecommendationCoreSchema = z.object({
   summary: z.string().min(1).describe("A concise, empathetic answer grounded in tool results"),
   riskLevel: z.enum(["stable", "tight", "shortfall"]).describe("The analyze_paycheck_scenario riskLevel before optional plan changes"),
@@ -274,6 +502,7 @@ export const RecommendationSchema = RecommendationCoreSchema.omit({ recommendedA
     notes: z.array(z.string())
   }),
   monitoringDecision: MonitoringCaseDecisionSchema.nullable().default(null),
+  resolutionCase: ResolutionCaseSchema.nullable().default(null),
   decisionSupport: FinalDecisionSupportSchema,
   disclaimer: z.literal("Planning guidance, not financial advice.")
 });
@@ -308,5 +537,8 @@ export type VerifierResult = z.infer<typeof VerifierResultSchema>;
 export type AgentRecommendation = z.infer<typeof AgentRecommendationSchema>;
 export type Recommendation = z.infer<typeof RecommendationSchema>;
 export type MonitoringCaseDecision = z.infer<typeof MonitoringCaseDecisionSchema>;
+export type ResolutionCaseStatus = z.infer<typeof ResolutionCaseStatusSchema>;
+export type ResolutionCaseTerminalReason = z.infer<typeof ResolutionCaseTerminalReasonSchema>;
+export type ResolutionCase = z.infer<typeof ResolutionCaseSchema>;
 export type PlanningSafetyPreviewRequest = z.infer<typeof PlanningSafetyPreviewRequestSchema>;
 export type PlanningAgentRequest = z.infer<typeof PlanningAgentRequestSchema>;

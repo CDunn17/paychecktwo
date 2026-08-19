@@ -216,7 +216,7 @@ export function buildSafetyPreview(request: SafetyPreviewRequest): SafetyPreview
       "Balance, paycheck, buffer, and dates",
       "Bill names, categories, amounts, and due dates",
       ...(request.monitoring ? [
-        "Locally derived generic income-source confidence, disruption codes, coverage forecast, and case decision"
+        "Locally derived generic income-source confidence, disruption codes, coverage forecast, case decision, and resolution-case status/history"
       ] : []),
       ...(request.policySources.length > 0 ? ["Saved policy sources relevant to the question"] : [])
     ],

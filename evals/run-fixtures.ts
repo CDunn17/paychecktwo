@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { analyzeCashflow, findPressurePoints } from "../src/agent/calculations.js";
 import { prepareMonitoringToolResult } from "../src/agent/monitoring-context.js";
 import { MonitoringRequestContextSchema } from "../src/agent/request-schemas.js";
+import { openResolutionCase } from "../src/agent/resolution-case.js";
 import { DisruptionSchema, FinancialPlanSchema } from "../src/agent/schemas.js";
 
 const fixtures = JSON.parse(await readFile(new URL("./cases.json", import.meta.url), "utf8")) as Array<{
@@ -11,6 +12,7 @@ const fixtures = JSON.parse(await readFile(new URL("./cases.json", import.meta.u
   successCriteria: string[];
   monitoring?: unknown;
   expectedMonitoringDisposition?: "no_case" | "needs_confirmation" | "open_case";
+  expectedResolutionCaseStatus?: "detected" | "needs_confirmation";
 }>;
 
 const plan = FinancialPlanSchema.parse({
@@ -44,6 +46,13 @@ for (const fixture of fixtures) {
     }
     if (monitoring.caseDecision.disposition !== fixture.expectedMonitoringDisposition) {
       throw new Error(`${fixture.id}: monitoring disposition does not match fixture expectation`);
+    }
+    const resolutionCase = openResolutionCase(monitoring.caseDecision, "2026-08-17");
+    if (resolutionCase?.status !== fixture.expectedResolutionCaseStatus) {
+      throw new Error(`${fixture.id}: resolution-case status does not match fixture expectation`);
+    }
+    if (resolutionCase && !fixture.expectedTools.includes("get_resolution_case")) {
+      throw new Error(`${fixture.id}: resolution-case tool is not required`);
     }
   }
   console.log(`${fixture.id.padEnd(28)} risk=${analysis.riskLevel.padEnd(9)} safe=$${analysis.safeToSpend.toFixed(2).padStart(7)} pressure_points=${pressurePoints.length}`);

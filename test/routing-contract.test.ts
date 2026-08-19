@@ -19,6 +19,7 @@ test("financial toolset exposes one structurally exclusive primary calculation",
   const names = createFinancialTools(new PlanStore()).map((candidate) => candidate.name);
   assert.equal(names.filter((name) => name === "analyze_paycheck_scenario").length, 1);
   assert.equal(names.filter((name) => name === "analyze_income_monitoring").length, 1);
+  assert.equal(names.filter((name) => name === "get_resolution_case").length, 1);
   assert.equal(names.includes("build_cashflow_timeline"), false);
   assert.equal(names.includes("simulate_disruption"), false);
 });
@@ -30,6 +31,9 @@ test("monitoring routing is explicit, single-use, and application-controlled", (
   assert.match(ORCHESTRATOR_PROMPT, /never infer a disruption from spending behavior/i);
   assert.match(VERIFIER_PROMPT, /contradicts its application-owned caseDecision/);
   assert.match(VERIFIER_PROMPT, /treats an inferred signal as confirmed/);
+  assert.match(ORCHESTRATOR_PROMPT, /call get_resolution_case exactly once after analyze_income_monitoring and before planning/i);
+  assert.match(ORCHESTRATOR_PROMPT, /Do not claim the case advanced, closed, escalated, persisted, or triggered an external action/);
+  assert.match(VERIFIER_PROMPT, /contradicts its application-owned caseDecision, status, or nextRequiredAction/);
 });
 
 test("browser displays the structured autonomy contract", () => {

@@ -2,6 +2,7 @@ import { createPaycheckAgent } from "./create-agent.js";
 import { settleWithinDeadline, WallClockDeadlineError } from "./execution-budget.js";
 import { PlanStore } from "./plan-store.js";
 import { prepareMonitoringToolResult } from "./monitoring-context.js";
+import { openResolutionCase } from "./resolution-case.js";
 import { finalizeRecommendation, recommendationMatchesPrimaryAnalysis } from "./recommendation-policy.js";
 import { inspectUnknownForSensitiveData, sanitizeAgentRequest, summarizeSensitiveData } from "./safety.js";
 import { AgentRequestSchema, type AgentRequest } from "./request-schemas.js";
@@ -73,7 +74,16 @@ export class PaycheckAgentService {
     const monitoringResult = request.monitoring
       ? prepareMonitoringToolResult(request.plan, request.asOf as string, request.monitoring)
       : undefined;
-    this.planStore.set(request.sessionId, request.plan, request.policySources, monitoringResult);
+    const resolutionCase = monitoringResult
+      ? openResolutionCase(monitoringResult.caseDecision, request.asOf as string)
+      : null;
+    this.planStore.set(
+      request.sessionId,
+      request.plan,
+      request.policySources,
+      monitoringResult,
+      resolutionCase
+    );
     try {
       const timeoutMs = positiveNumberFromEnv("STRANDS_TIMEOUT_MS", DEFAULT_TIMEOUT_MS);
       const startedAt = performance.now();
@@ -99,7 +109,7 @@ export class PaycheckAgentService {
       const asOf = request.asOf ?? new Date().toISOString().slice(0, 10);
       const invocationController = new AbortController();
       const invocation = agent.invoke(
-        `Session ID: ${request.sessionId}\nAs-of date: ${asOf}\nPolicy sources available: ${request.policySources.length}\nMonitoring analysis available: ${monitoringResult ? "yes; call analyze_income_monitoring exactly once before planning" : "no; do not call analyze_income_monitoring"}\nUser request: ${request.message}`,
+        `Session ID: ${request.sessionId}\nAs-of date: ${asOf}\nPolicy sources available: ${request.policySources.length}\nMonitoring analysis available: ${monitoringResult ? "yes; call analyze_income_monitoring exactly once before planning" : "no; do not call analyze_income_monitoring"}\nResolution case available: ${resolutionCase ? "yes; call get_resolution_case exactly once after monitoring and before planning" : "no; do not call get_resolution_case"}\nUser request: ${request.message}`,
         {
           cancelSignal: invocationController.signal,
           limits: {
@@ -183,6 +193,22 @@ export class PaycheckAgentService {
       if (!monitoringResult && monitoringAnalysisCalls !== 0) {
         throw new AgentIncompleteError("monitoringRoutingFailed", wallClockMs, diagnostics);
       }
+      const resolutionCaseCalls = completedEntries.filter(
+        (entry) => entry.tool === "get_resolution_case" && !entry.failed
+      ).length;
+      const resolutionCaseIndex = completedEntries.findIndex(
+        (entry) => entry.tool === "get_resolution_case" && !entry.failed
+      );
+      if (resolutionCase && (
+        resolutionCaseCalls !== 1
+        || resolutionCaseIndex <= monitoringAnalysisIndex
+        || (primaryAnalysisIndex >= 0 && resolutionCaseIndex > primaryAnalysisIndex)
+      )) {
+        throw new AgentIncompleteError("resolutionCaseRoutingFailed", wallClockMs, diagnostics);
+      }
+      if (!resolutionCase && resolutionCaseCalls !== 0) {
+        throw new AgentIncompleteError("resolutionCaseRoutingFailed", wallClockMs, diagnostics);
+      }
       if (structuredOutput === undefined) {
         throw new AgentIncompleteError(result.stopReason, wallClockMs, diagnostics);
       }
@@ -196,7 +222,8 @@ export class PaycheckAgentService {
       const modelRecommendation = finalizeRecommendation(
         structuredOutput,
         verifierResult,
-        monitoringResult?.caseDecision ?? null
+        monitoringResult?.caseDecision ?? null,
+        resolutionCase
       );
       const primaryAnalysis = getPrimaryAnalysis();
       if (

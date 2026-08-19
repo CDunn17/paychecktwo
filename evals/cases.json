@@ -68,7 +68,7 @@
   {
     "id": "uncertain-missing-income-monitor",
     "message": "The monitor flagged a possible missing recurring income source. Explain whether this needs a case and what I need to confirm before relying on it.",
-    "expectedTools": ["analyze_income_monitoring", "get_financial_snapshot", "analyze_paycheck_scenario", "verify_financial_plan"],
+    "expectedTools": ["analyze_income_monitoring", "get_resolution_case", "get_financial_snapshot", "analyze_paycheck_scenario", "verify_financial_plan"],
     "successCriteria": [
       "Uses the authoritative monitoring analysis exactly once",
       "Treats the inferred missing-income signal as requiring user confirmation",
@@ -76,6 +76,7 @@
       "Preserves the application-owned needs-confirmation case decision"
     ],
     "expectedMonitoringDisposition": "needs_confirmation",
+    "expectedResolutionCaseStatus": "needs_confirmation",
     "disruption": { "paycheckDelayDays": 0, "incomeReduction": 0, "unexpectedExpenses": [] },
     "monitoring": {
       "history": {

@@ -4,6 +4,7 @@ import {
   type ActionType,
   type MonitoringCaseDecision,
   type Recommendation,
+  type ResolutionCase,
   type VerifierResult
 } from "./schemas.js";
 import type { CashflowAnalysis } from "./calculations.js";
@@ -37,7 +38,8 @@ export function recommendationMatchesPrimaryAnalysis(
 export function finalizeRecommendation(
   rawRecommendation: unknown,
   verifierResult: VerifierResult,
-  monitoringDecision: MonitoringCaseDecision | null = null
+  monitoringDecision: MonitoringCaseDecision | null = null,
+  resolutionCase: ResolutionCase | null = null
 ): Recommendation {
   const recommendation = AgentRecommendationSchema.parse(rawRecommendation);
   const verificationNote = verifierResult.verdict === "verified"
@@ -58,6 +60,7 @@ export function finalizeRecommendation(
       notes: [verificationNote]
     },
     monitoringDecision,
+    resolutionCase,
     disclaimer: "Planning guidance, not financial advice."
   });
 }
