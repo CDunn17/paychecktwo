@@ -6,7 +6,12 @@ import {
   ResolutionCaseTransitionError
 } from "../src/agent/resolution-case.js";
 import { PlanStore } from "../src/agent/plan-store.js";
-import { FinancialPlanSchema, ResolutionCaseSchema, type MonitoringCaseDecision } from "../src/agent/schemas.js";
+import {
+  FinancialPlanSchema,
+  ResolutionCaseCompletionEvidenceSchema,
+  ResolutionCaseSchema,
+  type MonitoringCaseDecision
+} from "../src/agent/schemas.js";
 
 const materialDecision: MonitoringCaseDecision = {
   disposition: "open_case",
@@ -171,9 +176,22 @@ test("request store clones and deletes the minimized resolution case", () => {
     bills: []
   });
   store.set("case-store", plan, [], undefined, resolutionCase);
+  const evidence = ResolutionCaseCompletionEvidenceSchema.parse({
+    caseId: resolutionCase.caseId,
+    expectedVersion: resolutionCase.version,
+    asOf: "2026-08-18",
+    outcomeConfirmation: "risk_cleared",
+    activeDisruptionCount: 0,
+    protectedObligationRiskCount: 0
+  });
+  store.setCaseCompletionEvidence("case-store", evidence);
   const retrieved = store.getResolutionCase("case-store");
   retrieved.status = "escalated";
   assert.equal(store.getResolutionCase("case-store").status, "detected");
+  const retrievedEvidence = store.getCaseCompletionEvidence("case-store");
+  retrievedEvidence.activeDisruptionCount = 9;
+  assert.equal(store.getCaseCompletionEvidence("case-store").activeDisruptionCount, 0);
   store.delete("case-store");
   assert.throws(() => store.getResolutionCase("case-store"), /No financial plan is loaded/);
+  assert.throws(() => store.getCaseCompletionEvidence("case-store"), /No financial plan is loaded/);
 });

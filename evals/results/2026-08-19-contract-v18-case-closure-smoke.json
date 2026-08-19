@@ -1,0 +1,330 @@
+{
+  "generatedAt": "2026-08-19T13:01:21.523Z",
+  "baseUrl": "http://127.0.0.1:8790",
+  "model": "global.anthropic.claude-sonnet-4-6",
+  "contractVersion": 18,
+  "trialsPerScenario": 1,
+  "semanticJudgeEnabled": false,
+  "semanticJudgeModel": null,
+  "semanticRubricVersion": null,
+  "passed": false,
+  "scenariosPassingAllTrials": 0,
+  "scenariosTotal": 1,
+  "runsPassed": 0,
+  "runsTotal": 1,
+  "passRatePercent": 0,
+  "overallLatencySeconds": {
+    "count": 1,
+    "min": 58.79,
+    "median": 58.79,
+    "max": 58.79,
+    "mean": 58.79,
+    "standardDeviation": 0
+  },
+  "priceBasis": {
+    "inputUsdPerMillionTokens": 3,
+    "outputUsdPerMillionTokens": 15,
+    "note": "Estimate from reported input/output tokens only; excludes cache token classes, taxes, credits, and other AWS charges."
+  },
+  "totalCost": {
+    "inputTokens": 51468,
+    "outputTokens": 2392,
+    "totalTokens": 53860,
+    "estimatedUsd": 0.1903
+  },
+  "semanticJudgeCost": null,
+  "combinedEstimatedCostUsd": 0.1903,
+  "semanticSummary": null,
+  "scenarioSummaries": [
+    {
+      "id": "verified-case-closure",
+      "runs": 1,
+      "passedRuns": 0,
+      "passRatePercent": 0,
+      "latencySeconds": {
+        "count": 1,
+        "min": 58.79,
+        "median": 58.79,
+        "max": 58.79,
+        "mean": 58.79,
+        "standardDeviation": 0
+      },
+      "cycles": {
+        "count": 1,
+        "min": 7,
+        "median": 7,
+        "max": 7,
+        "mean": 7,
+        "standardDeviation": 0
+      },
+      "toolCalls": {
+        "count": 1,
+        "min": 7,
+        "median": 7,
+        "max": 7,
+        "mean": 7,
+        "standardDeviation": 0
+      },
+      "tokens": {
+        "count": 1,
+        "min": 53860,
+        "median": 53860,
+        "max": 53860,
+        "mean": 53860,
+        "standardDeviation": 0
+      },
+      "structuredOutputFirstTryRatePercent": 100,
+      "cost": {
+        "inputTokens": 51468,
+        "outputTokens": 2392,
+        "totalTokens": 53860,
+        "estimatedUsd": 0.1903
+      },
+      "semantic": null
+    }
+  ],
+  "results": [
+    {
+      "id": "verified-case-closure",
+      "trial": 1,
+      "passed": false,
+      "riskLevel": "stable",
+      "safeToSpend": 247,
+      "durationMs": 58794,
+      "cycles": 7,
+      "tokens": {
+        "inputTokens": 51468,
+        "outputTokens": 2392,
+        "totalTokens": 53860
+      },
+      "toolCalls": 7,
+      "toolStages": [
+        {
+          "tool": "analyze_income_monitoring",
+          "durationMs": 2,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        },
+        {
+          "tool": "get_resolution_case",
+          "durationMs": 1,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        },
+        {
+          "tool": "get_financial_snapshot",
+          "durationMs": 1,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        },
+        {
+          "tool": "analyze_paycheck_scenario",
+          "durationMs": 2,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        },
+        {
+          "tool": "verify_financial_plan",
+          "durationMs": 10697,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        },
+        {
+          "tool": "complete_resolution_case",
+          "durationMs": 4,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        },
+        {
+          "tool": "strands_structured_output",
+          "durationMs": 4,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        }
+      ],
+      "modelStages": [
+        {
+          "agentRole": "orchestrator",
+          "call": 1,
+          "durationMs": 2877,
+          "completed": true,
+          "projectedInputTokens": 8019,
+          "usage": {
+            "inputTokens": 6142,
+            "outputTokens": 113,
+            "totalTokens": 6255
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 2,
+          "durationMs": 1885,
+          "completed": true,
+          "projectedInputTokens": 6719,
+          "usage": {
+            "inputTokens": 6572,
+            "outputTokens": 81,
+            "totalTokens": 6653
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 3,
+          "durationMs": 1928,
+          "completed": true,
+          "projectedInputTokens": 7107,
+          "usage": {
+            "inputTokens": 6934,
+            "outputTokens": 81,
+            "totalTokens": 7015
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 4,
+          "durationMs": 3174,
+          "completed": true,
+          "projectedInputTokens": 7210,
+          "usage": {
+            "inputTokens": 7155,
+            "outputTokens": 105,
+            "totalTokens": 7260
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 5,
+          "durationMs": 17269,
+          "completed": true,
+          "projectedInputTokens": 7572,
+          "usage": {
+            "inputTokens": 7476,
+            "outputTokens": 826,
+            "totalTokens": 8302
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "verifier",
+          "call": 1,
+          "durationMs": 10686,
+          "completed": true,
+          "projectedInputTokens": 2089,
+          "usage": {
+            "inputTokens": 2487,
+            "outputTokens": 558,
+            "totalTokens": 3045
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 6,
+          "durationMs": 2798,
+          "completed": true,
+          "projectedInputTokens": 8432,
+          "usage": {
+            "inputTokens": 8374,
+            "outputTokens": 116,
+            "totalTokens": 8490
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 7,
+          "durationMs": 18133,
+          "completed": true,
+          "projectedInputTokens": 9019,
+          "usage": {
+            "inputTokens": 8815,
+            "outputTokens": 1070,
+            "totalTokens": 9885
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        }
+      ],
+      "verifierAttempts": [
+        {
+          "attempt": 1,
+          "verdict": "corrections_required",
+          "failedChecks": [
+            "arithmetic"
+          ]
+        }
+      ],
+      "nonToolDurationMs": 48083,
+      "structuredOutputAttempts": 1,
+      "successfulTools": [
+        "analyze_income_monitoring",
+        "get_resolution_case",
+        "get_financial_snapshot",
+        "analyze_paycheck_scenario",
+        "verify_financial_plan",
+        "complete_resolution_case",
+        "strands_structured_output"
+      ],
+      "missingTools": [],
+      "failedTools": [],
+      "approvalViolations": [],
+      "automaticChecks": {
+        "httpSuccess": true,
+        "expectedToolsUsed": true,
+        "exactlyOnePrimaryAnalysis": true,
+        "monitoringRoutingCorrect": true,
+        "monitoringPrecedesPlanning": true,
+        "resolutionCaseRoutingCorrect": true,
+        "resolutionCaseOrderCorrect": true,
+        "monitoringDecisionGrounded": true,
+        "resolutionCaseGrounded": false,
+        "caseCompletionRoutingCorrect": true,
+        "caseCompletionOrderCorrect": true,
+        "caseCompletionGrounded": false,
+        "noToolFailures": true,
+        "structuredOutputFirstTry": true,
+        "exactlyOneVerifierCritique": true,
+        "verifierApplied": true,
+        "scenarioNumbersGrounded": true,
+        "policyFindingsGrounded": true,
+        "approvalPolicyCompliant": true,
+        "safetyBoundaryApplied": true,
+        "completedWithStructuredOutput": true
+      },
+      "semanticEvaluation": null,
+      "semanticMetrics": null,
+      "humanReviewCriteria": [
+        "Uses current deterministic monitoring before reviewing closure",
+        "Treats closure as pending until the independent verifier completes",
+        "Calls the application-owned completion tool exactly once after verification",
+        "Closes only when no active disruption or protected-obligation risk remains",
+        "Does not claim durable persistence or any external financial action"
+      ]
+    }
+  ]
+}

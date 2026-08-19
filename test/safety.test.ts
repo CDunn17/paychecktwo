@@ -7,6 +7,7 @@ import {
   sanitizeAgentRequest
 } from "../src/agent/safety.js";
 import { AgentRequestSchema, SafetyPreviewRequestSchema } from "../src/agent/request-schemas.js";
+import { ResolutionCaseSchema } from "../src/agent/schemas.js";
 
 const baseRequest = {
   sessionId: "safety-test",
@@ -23,6 +24,29 @@ const baseRequest = {
   policySources: []
 };
 const fakeAwsAccessKey = ["AKIA", "IOSFODNN7EXAMPLE"].join("");
+const priorMonitoringCase = ResolutionCaseSchema.parse({
+  caseId: "case-1",
+  version: 5,
+  status: "monitoring",
+  nextRequiredAction: "observe_outcome",
+  openedOn: "2026-08-10",
+  updatedOn: "2026-08-11",
+  trigger: {
+    reasonCodes: ["protected_obligation_risk"],
+    activeDisruptionCount: 1,
+    uncertainDisruptionCount: 0,
+    protectedObligationRiskCount: 1
+  },
+  selectedOptionId: "option-1",
+  terminalReason: null,
+  transitionHistory: [
+    { fromStatus: null, toStatus: "detected", eventType: "case_opened", occurredOn: "2026-08-10" },
+    { fromStatus: "detected", toStatus: "options_ready", eventType: "options_calculated", occurredOn: "2026-08-10" },
+    { fromStatus: "options_ready", toStatus: "awaiting_decision", eventType: "options_presented", occurredOn: "2026-08-10" },
+    { fromStatus: "awaiting_decision", toStatus: "prepared", eventType: "decision_recorded", occurredOn: "2026-08-11" },
+    { fromStatus: "prepared", toStatus: "monitoring", eventType: "follow_up_started", occurredOn: "2026-08-11" }
+  ]
+});
 
 test("redacts high-confidence identifiers and secrets without retaining their values", () => {
   const rawValues = [
@@ -149,6 +173,61 @@ test("monitoring history stays local and sensitive opaque identifiers are replac
   assert.equal(preview.monitoringHistorySentToModel, false);
   assert.equal(preview.localOnlyFields.length, 1);
   assert.match(preview.fieldsSent.join(" "), /Locally derived generic income-source confidence/);
+});
+
+test("accepts only synthetic monitoring-state continuation with matching version and current monitoring", () => {
+  const monitoring = {
+    history: {
+      historyStart: "2026-07-01",
+      historyEnd: "2026-08-17",
+      transactions: [
+        { id: "event-1", occurredOn: "2026-07-01", amountCents: 50_000, direction: "credit", sourceAlias: "income-1", classification: "income_candidate", provenance: "synthetic_fixture" },
+        { id: "event-2", occurredOn: "2026-07-08", amountCents: 50_000, direction: "credit", sourceAlias: "income-1", classification: "income_candidate", provenance: "synthetic_fixture" },
+        { id: "event-3", occurredOn: "2026-07-15", amountCents: 50_000, direction: "credit", sourceAlias: "income-1", classification: "income_candidate", provenance: "synthetic_fixture" }
+      ],
+      overrides: [{ sourceAlias: "income-1", action: "confirm", kind: "hourly_job" }]
+    },
+    horizonEnd: "2026-08-25",
+    protectedBillIds: ["phone"]
+  };
+  const continuation = {
+    provenance: "synthetic_fixture",
+    priorCase: priorMonitoringCase,
+    expectedVersion: 5,
+    outcomeConfirmation: "risk_cleared"
+  };
+  const accepted = AgentRequestSchema.parse({
+    ...baseRequest,
+    monitoring,
+    caseContinuation: continuation,
+    privacy: { consentToModel: true, ephemeral: true }
+  });
+  assert.equal(accepted.caseContinuation?.priorCase.status, "monitoring");
+  assert.equal(AgentRequestSchema.safeParse({
+    ...baseRequest,
+    caseContinuation: continuation,
+    privacy: { consentToModel: true, ephemeral: true }
+  }).success, false);
+  assert.equal(AgentRequestSchema.safeParse({
+    ...baseRequest,
+    monitoring,
+    caseContinuation: { ...continuation, expectedVersion: 4 },
+    privacy: { consentToModel: true, ephemeral: true }
+  }).success, false);
+  assert.equal(AgentRequestSchema.safeParse({
+    ...baseRequest,
+    monitoring,
+    caseContinuation: { ...continuation, provenance: "caller_claimed" },
+    privacy: { consentToModel: true, ephemeral: true }
+  }).success, false);
+
+  const preview = buildSafetyPreview(SafetyPreviewRequestSchema.parse({
+    ...baseRequest,
+    monitoring,
+    caseContinuation: continuation
+  }));
+  assert.match(preview.fieldsSent.join(" "), /fixed outcome-confirmation category/i);
+  assert.equal(preview.monitoringHistorySentToModel, false);
 });
 
 test("requires explicit model consent and defaults accepted requests to ephemeral", () => {

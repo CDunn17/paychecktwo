@@ -204,6 +204,11 @@ export function sanitizeAgentRequest<T extends AgentRequest | SafetyPreviewReque
       sourceAlias: sanitizedAliases.get(override.sourceAlias) ?? "redacted-income-source"
     }));
   }
+  if (sanitized.syntheticEventStream) {
+    sanitized.syntheticEventStream.protectedBillIds = sanitized.syntheticEventStream.protectedBillIds.map(
+      (billId) => sanitizedBillIds.get(billId) ?? "redacted-bill"
+    );
+  }
   return { request: sanitized, findings, summary: summarizeSensitiveData(findings) };
 }
 
@@ -218,11 +223,22 @@ export function buildSafetyPreview(request: SafetyPreviewRequest): SafetyPreview
       ...(request.monitoring ? [
         "Locally derived generic income-source confidence, disruption codes, coverage forecast, case decision, and resolution-case status/history"
       ] : []),
+      ...(request.caseContinuation ? [
+        "Synthetic prior-case version, fixed outcome-confirmation category, and locally derived completion criteria"
+      ] : []),
+      ...(request.syntheticEventStream ? [
+        "Locally derived event-stream checkpoint counts, source-kind counts, case states, and completion availability"
+      ] : []),
       ...(request.policySources.length > 0 ? ["Saved policy sources relevant to the question"] : [])
     ],
-    localOnlyFields: request.monitoring ? [
-      "Synthetic normalized transaction IDs, dates, amounts, directions, source aliases, classifications, and user pattern corrections"
-    ] : [],
+    localOnlyFields: [
+      ...(request.monitoring ? [
+        "Synthetic normalized transaction IDs, dates, amounts, directions, source aliases, classifications, and user pattern corrections"
+      ] : []),
+      ...(request.syntheticEventStream ? [
+        "Synthetic event IDs, event-level dates and amounts, observed-income matches, case-progress events, and protected bill references"
+      ] : [])
+    ],
     policySourceCount: request.policySources.length,
     monitoringHistorySentToModel: false,
     redactions: summary,

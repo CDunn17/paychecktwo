@@ -2,6 +2,8 @@ import { createPaycheckAgent } from "./create-agent.js";
 import { settleWithinDeadline, WallClockDeadlineError } from "./execution-budget.js";
 import { PlanStore } from "./plan-store.js";
 import { prepareMonitoringToolResult } from "./monitoring-context.js";
+import { createResolutionCaseCompletionEvidence } from "./case-completion.js";
+import { replaySyntheticEventStream } from "./synthetic-event-stream.js";
 import { openResolutionCase } from "./resolution-case.js";
 import { finalizeRecommendation, recommendationMatchesPrimaryAnalysis } from "./recommendation-policy.js";
 import { inspectUnknownForSensitiveData, sanitizeAgentRequest, summarizeSensitiveData } from "./safety.js";
@@ -71,20 +73,46 @@ export class PaycheckAgentService {
   async advise(rawRequest: unknown) {
     const parsedRequest: AgentRequest = AgentRequestSchema.parse(rawRequest);
     const { request, summary: inputRedactions } = sanitizeAgentRequest(parsedRequest);
-    const monitoringResult = request.monitoring
-      ? prepareMonitoringToolResult(request.plan, request.asOf as string, request.monitoring)
+    const syntheticEventReplay = request.syntheticEventStream
+      ? replaySyntheticEventStream(request.plan, request.syntheticEventStream)
       : undefined;
-    const resolutionCase = monitoringResult
-      ? openResolutionCase(monitoringResult.caseDecision, request.asOf as string)
-      : null;
-    this.planStore.set(
-      request.sessionId,
-      request.plan,
-      request.policySources,
-      monitoringResult,
-      resolutionCase
-    );
+    const effectivePlan = syntheticEventReplay?.effectivePlan ?? request.plan;
+    const monitoringResult = syntheticEventReplay?.finalMonitoringResult
+      ?? (request.monitoring
+        ? prepareMonitoringToolResult(effectivePlan, request.asOf as string, request.monitoring)
+        : undefined);
+    const resolutionCase = request.caseContinuation?.priorCase
+      ?? syntheticEventReplay?.finalResolutionCase
+      ?? (monitoringResult
+        ? openResolutionCase(monitoringResult.caseDecision, request.asOf as string)
+        : null);
+    const completionCandidate = request.caseContinuation ? {
+      expectedVersion: request.caseContinuation.expectedVersion,
+      outcomeConfirmation: request.caseContinuation.outcomeConfirmation
+    } : syntheticEventReplay?.completionCandidate ?? null;
     try {
+      this.planStore.set(
+        request.sessionId,
+        effectivePlan,
+        request.policySources,
+        monitoringResult,
+        resolutionCase
+      );
+      if (syntheticEventReplay) {
+        this.planStore.setSyntheticEventStream(request.sessionId, syntheticEventReplay.summary);
+      }
+      if (completionCandidate && monitoringResult && resolutionCase) {
+        this.planStore.setCaseCompletionEvidence(
+          request.sessionId,
+          createResolutionCaseCompletionEvidence({
+            resolutionCase,
+            expectedVersion: completionCandidate.expectedVersion,
+            asOf: request.asOf as string,
+            outcomeConfirmation: completionCandidate.outcomeConfirmation,
+            monitoringResult
+          })
+        );
+      }
       const timeoutMs = positiveNumberFromEnv("STRANDS_TIMEOUT_MS", DEFAULT_TIMEOUT_MS);
       const startedAt = performance.now();
       const deadlineAtMs = startedAt + timeoutMs;
@@ -96,6 +124,7 @@ export class PaycheckAgentService {
         getCapturedStructuredOutput,
         getPolicyReview,
         getVerifierResult,
+        getCaseCompletionResult,
         getPrimaryAnalysis
       } = createPaycheckAgent(
         this.planStore,
@@ -109,7 +138,7 @@ export class PaycheckAgentService {
       const asOf = request.asOf ?? new Date().toISOString().slice(0, 10);
       const invocationController = new AbortController();
       const invocation = agent.invoke(
-        `Session ID: ${request.sessionId}\nAs-of date: ${asOf}\nPolicy sources available: ${request.policySources.length}\nMonitoring analysis available: ${monitoringResult ? "yes; call analyze_income_monitoring exactly once before planning" : "no; do not call analyze_income_monitoring"}\nResolution case available: ${resolutionCase ? "yes; call get_resolution_case exactly once after monitoring and before planning" : "no; do not call get_resolution_case"}\nUser request: ${request.message}`,
+        `Session ID: ${request.sessionId}\nAs-of date: ${asOf}\nPolicy sources available: ${request.policySources.length}\nSynthetic event stream available: ${syntheticEventReplay ? "yes; call analyze_synthetic_event_stream exactly once before analyze_income_monitoring" : "no; do not call analyze_synthetic_event_stream"}\nMonitoring analysis available: ${monitoringResult ? "yes; call analyze_income_monitoring exactly once before planning" : "no; do not call analyze_income_monitoring"}\nResolution case available: ${resolutionCase ? "yes; call get_resolution_case exactly once after monitoring and before planning" : "no; do not call get_resolution_case"}\nCase completion review available: ${completionCandidate ? "yes; call complete_resolution_case exactly once after verify_financial_plan and before final output" : "no; do not call complete_resolution_case"}\nCompletion outcome-confirmation category: ${completionCandidate?.outcomeConfirmation ?? "none"}\nUser request: ${request.message}`,
         {
           cancelSignal: invocationController.signal,
           limits: {
@@ -184,6 +213,22 @@ export class PaycheckAgentService {
       const primaryAnalysisIndex = completedEntries.findIndex(
         (entry) => entry.tool === "analyze_paycheck_scenario" && !entry.failed
       );
+      const syntheticEventStreamCalls = completedEntries.filter(
+        (entry) => entry.tool === "analyze_synthetic_event_stream" && !entry.failed
+      ).length;
+      const syntheticEventStreamIndex = completedEntries.findIndex(
+        (entry) => entry.tool === "analyze_synthetic_event_stream" && !entry.failed
+      );
+      if (syntheticEventReplay && (
+        syntheticEventStreamCalls !== 1
+        || syntheticEventStreamIndex < 0
+        || syntheticEventStreamIndex > monitoringAnalysisIndex
+      )) {
+        throw new AgentIncompleteError("syntheticEventStreamRoutingFailed", wallClockMs, diagnostics);
+      }
+      if (!syntheticEventReplay && syntheticEventStreamCalls !== 0) {
+        throw new AgentIncompleteError("syntheticEventStreamRoutingFailed", wallClockMs, diagnostics);
+      }
       if (monitoringResult && (
         monitoringAnalysisCalls !== 1
         || (primaryAnalysisIndex >= 0 && monitoringAnalysisIndex > primaryAnalysisIndex)
@@ -215,15 +260,37 @@ export class PaycheckAgentService {
       const verifierSucceeded = completedEntries.some(
         (entry) => entry.tool === "verify_financial_plan" && !entry.failed
       );
+      const verifierIndex = completedEntries.findIndex(
+        (entry) => entry.tool === "verify_financial_plan" && !entry.failed
+      );
       const verifierResult = getVerifierResult();
       if (!verifierSucceeded || verifierResult === undefined) {
         throw new AgentIncompleteError("verificationFailed", wallClockMs, diagnostics);
+      }
+      const caseCompletionCalls = completedEntries.filter(
+        (entry) => entry.tool === "complete_resolution_case" && !entry.failed
+      ).length;
+      const caseCompletionIndex = completedEntries.findIndex(
+        (entry) => entry.tool === "complete_resolution_case" && !entry.failed
+      );
+      const caseCompletionResult = getCaseCompletionResult();
+      if (completionCandidate && (
+        caseCompletionCalls !== 1
+        || caseCompletionIndex <= verifierIndex
+        || caseCompletionResult === undefined
+      )) {
+        throw new AgentIncompleteError("caseCompletionRoutingFailed", wallClockMs, diagnostics);
+      }
+      if (!completionCandidate && (caseCompletionCalls !== 0 || caseCompletionResult !== undefined)) {
+        throw new AgentIncompleteError("caseCompletionRoutingFailed", wallClockMs, diagnostics);
       }
       const modelRecommendation = finalizeRecommendation(
         structuredOutput,
         verifierResult,
         monitoringResult?.caseDecision ?? null,
-        resolutionCase
+        caseCompletionResult?.resolutionCase ?? resolutionCase,
+        caseCompletionResult?.assessment ?? null,
+        syntheticEventReplay?.summary ?? null
       );
       const primaryAnalysis = getPrimaryAnalysis();
       if (

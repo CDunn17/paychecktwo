@@ -93,5 +93,127 @@
       "horizonEnd": "2026-08-25",
       "protectedBillIds": ["phone", "groceries", "insurance"]
     }
+  },
+  {
+    "id": "verified-case-closure",
+    "message": "The previously selected option has finished, and I confirm that the immediate risk is cleared. Recheck the current monitoring evidence and tell me whether this synthetic case can close.",
+    "expectedTools": ["analyze_income_monitoring", "get_resolution_case", "get_financial_snapshot", "analyze_paycheck_scenario", "verify_financial_plan", "complete_resolution_case"],
+    "successCriteria": [
+      "Uses current deterministic monitoring before reviewing closure",
+      "Treats closure as pending until the independent verifier completes",
+      "Calls the application-owned completion tool exactly once after verification",
+      "Closes only when no active disruption or protected-obligation risk remains",
+      "Does not claim durable persistence or any external financial action"
+    ],
+    "expectedMonitoringDisposition": "no_case",
+    "expectedInitialResolutionCaseStatus": "monitoring",
+    "expectedFinalResolutionCaseStatus": "resolved",
+    "expectedCaseCompletionAuthorized": true,
+    "disruption": { "paycheckDelayDays": 0, "incomeReduction": 0, "unexpectedExpenses": [] },
+    "monitoring": {
+      "history": {
+        "historyStart": "2026-07-01",
+        "historyEnd": "2026-08-17",
+        "transactions": [
+          { "id": "closure-income-1", "occurredOn": "2026-07-24", "amountCents": 62000, "direction": "credit", "sourceAlias": "closure-income-alias", "classification": "income_candidate", "provenance": "synthetic_fixture" },
+          { "id": "closure-income-2", "occurredOn": "2026-07-31", "amountCents": 70000, "direction": "credit", "sourceAlias": "closure-income-alias", "classification": "income_candidate", "provenance": "synthetic_fixture" },
+          { "id": "closure-income-3", "occurredOn": "2026-08-07", "amountCents": 50000, "direction": "credit", "sourceAlias": "closure-income-alias", "classification": "income_candidate", "provenance": "synthetic_fixture" },
+          { "id": "closure-income-4", "occurredOn": "2026-08-14", "amountCents": 66000, "direction": "credit", "sourceAlias": "closure-income-alias", "classification": "income_candidate", "provenance": "synthetic_fixture" }
+        ],
+        "overrides": [{ "sourceAlias": "closure-income-alias", "action": "confirm", "kind": "hourly_job" }]
+      },
+      "horizonEnd": "2026-08-25",
+      "protectedBillIds": ["phone", "groceries", "insurance"]
+    },
+    "caseContinuation": {
+      "provenance": "synthetic_fixture",
+      "expectedVersion": 5,
+      "outcomeConfirmation": "risk_cleared",
+      "priorCase": {
+        "caseId": "case-1",
+        "version": 5,
+        "status": "monitoring",
+        "nextRequiredAction": "observe_outcome",
+        "openedOn": "2026-08-10",
+        "updatedOn": "2026-08-11",
+        "trigger": {
+          "reasonCodes": ["protected_obligation_risk"],
+          "activeDisruptionCount": 1,
+          "uncertainDisruptionCount": 0,
+          "protectedObligationRiskCount": 1
+        },
+        "selectedOptionId": "option-1",
+        "terminalReason": null,
+        "transitionHistory": [
+          { "fromStatus": null, "toStatus": "detected", "eventType": "case_opened", "occurredOn": "2026-08-10" },
+          { "fromStatus": "detected", "toStatus": "options_ready", "eventType": "options_calculated", "occurredOn": "2026-08-10" },
+          { "fromStatus": "options_ready", "toStatus": "awaiting_decision", "eventType": "options_presented", "occurredOn": "2026-08-10" },
+          { "fromStatus": "awaiting_decision", "toStatus": "prepared", "eventType": "decision_recorded", "occurredOn": "2026-08-11" },
+          { "fromStatus": "prepared", "toStatus": "monitoring", "eventType": "follow_up_started", "occurredOn": "2026-08-11" }
+        ]
+      }
+    }
+  },
+  {
+    "id": "variable-income-event-stream",
+    "message": "Replay the synthetic variable-income timeline, explain how the hourly, freelance, and second-job events changed the protected-bill risk, and report whether the prepared case can close. Do not imply durable monitoring or an external action.",
+    "asOf": "2026-08-19",
+    "plan": {
+      "name": "Synthetic user",
+      "balance": 240,
+      "paycheck": 1200,
+      "buffer": 100,
+      "payday": "2026-08-25",
+      "periodStart": "2026-08-10",
+      "bills": [
+        { "id": "housing", "name": "Housing", "amount": 650, "due": "2026-08-19", "category": "Housing" },
+        { "id": "transport", "name": "Work transport", "amount": 100, "due": "2026-08-21", "category": "Transport" }
+      ]
+    },
+    "expectedTools": ["analyze_synthetic_event_stream", "analyze_income_monitoring", "get_resolution_case", "get_financial_snapshot", "analyze_paycheck_scenario", "verify_financial_plan", "complete_resolution_case"],
+    "successCriteria": [
+      "Uses the minimized event-stream summary before the authoritative final monitoring analysis",
+      "Distinguishes hourly, freelance, and second-job sources without exposing event-level inputs",
+      "Explains that the first checkpoint opened a material case and the second cleared current disruption and protected risk",
+      "Preserves the legal detected-to-monitoring case path and closes only after the actual verifier approves",
+      "Does not claim durable monitoring, money movement, provider contact, or another external action"
+    ],
+    "expectedMonitoringDisposition": "no_case",
+    "expectedInitialResolutionCaseStatus": "monitoring",
+    "expectedFinalResolutionCaseStatus": "resolved",
+    "expectedCaseCompletionAuthorized": true,
+    "expectedSyntheticEventStream": {
+      "checkpointCount": 2,
+      "caseOpened": true,
+      "completionReviewAvailable": true,
+      "hourlyJobCount": 1,
+      "freelanceClientCount": 1,
+      "salariedJobCount": 1
+    },
+    "disruption": { "paycheckDelayDays": 0, "incomeReduction": 0, "unexpectedExpenses": [] },
+    "syntheticEventStream": {
+      "streamId": "stream-variable-income",
+      "provenance": "synthetic_fixture",
+      "streamStart": "2026-08-10",
+      "sources": [
+        { "id": "income-source-1", "label": "Income source 1", "kind": "hourly_job", "cadence": "weekly", "windowStart": "2026-08-10", "expectedBy": "2026-08-15", "graceDays": 2, "minimumExpectedCents": 50000, "typicalExpectedCents": 65000, "confidence": "user_confirmed" },
+        { "id": "income-source-2", "label": "Income source 2", "kind": "freelance_client", "cadence": "monthly", "windowStart": "2026-08-12", "expectedBy": "2026-08-18", "graceDays": 3, "minimumExpectedCents": 30000, "typicalExpectedCents": 45000, "confidence": "user_confirmed" },
+        { "id": "income-source-3", "label": "Income source 3", "kind": "salaried_job", "cadence": "biweekly", "windowStart": "2026-08-10", "expectedBy": "2026-08-14", "graceDays": 2, "minimumExpectedCents": 25000, "typicalExpectedCents": 25000, "confidence": "user_confirmed" }
+      ],
+      "protectedBillIds": ["housing", "transport"],
+      "events": [
+        { "eventId": "stream-event-1", "type": "income_observed", "occurredOn": "2026-08-14", "sourceId": "income-source-3", "amountCents": 25000, "matchConfidence": "user_confirmed", "provenance": "synthetic_fixture" },
+        { "eventId": "stream-event-2", "type": "income_observed", "occurredOn": "2026-08-17", "sourceId": "income-source-2", "amountCents": 15000, "matchConfidence": "user_confirmed", "provenance": "synthetic_fixture" },
+        { "eventId": "stream-event-3", "type": "monitoring_checkpoint", "occurredOn": "2026-08-18", "horizonEnd": "2026-08-25" },
+        { "eventId": "stream-event-4", "type": "case_options_calculated", "occurredOn": "2026-08-18" },
+        { "eventId": "stream-event-5", "type": "case_options_presented", "occurredOn": "2026-08-18" },
+        { "eventId": "stream-event-6", "type": "case_decision_recorded", "occurredOn": "2026-08-18", "selectedOptionId": "option-1" },
+        { "eventId": "stream-event-7", "type": "case_follow_up_started", "occurredOn": "2026-08-18" },
+        { "eventId": "stream-event-8", "type": "income_observed", "occurredOn": "2026-08-19", "sourceId": "income-source-1", "amountCents": 90000, "matchConfidence": "user_confirmed", "provenance": "synthetic_fixture" },
+        { "eventId": "stream-event-9", "type": "income_observed", "occurredOn": "2026-08-19", "sourceId": "income-source-2", "amountCents": 20000, "matchConfidence": "user_confirmed", "provenance": "synthetic_fixture" },
+        { "eventId": "stream-event-10", "type": "monitoring_checkpoint", "occurredOn": "2026-08-19", "horizonEnd": "2026-08-25" },
+        { "eventId": "stream-event-11", "type": "outcome_confirmation", "occurredOn": "2026-08-19", "outcomeConfirmation": "risk_cleared" }
+      ]
+    }
   }
 ]

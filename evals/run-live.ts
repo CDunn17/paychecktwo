@@ -6,9 +6,14 @@ import { z } from "zod";
 import { analyzeCashflow } from "../src/agent/calculations.js";
 import { actionRequiresApproval } from "../src/agent/recommendation-policy.js";
 import {
+  SyntheticEventStreamSchema,
+  replaySyntheticEventStream
+} from "../src/agent/synthetic-event-stream.js";
+import {
   DisruptionSchema,
   FinancialPlanSchema,
-  RecommendationSchema
+  RecommendationSchema,
+  type ResolutionCaseStatus
 } from "../src/agent/schemas.js";
 import {
   judgeRecommendation,
@@ -28,9 +33,24 @@ interface EvaluationFixture {
   successCriteria: string[];
   disruption: unknown;
   policySources?: unknown[];
+  asOf?: string;
+  plan?: unknown;
   monitoring?: unknown;
+  syntheticEventStream?: unknown;
+  caseContinuation?: unknown;
   expectedMonitoringDisposition?: "no_case" | "needs_confirmation" | "open_case";
   expectedResolutionCaseStatus?: "detected" | "needs_confirmation";
+  expectedInitialResolutionCaseStatus?: ResolutionCaseStatus;
+  expectedFinalResolutionCaseStatus?: ResolutionCaseStatus;
+  expectedCaseCompletionAuthorized?: boolean;
+  expectedSyntheticEventStream?: {
+    checkpointCount: number;
+    caseOpened: boolean;
+    completionReviewAvailable: boolean;
+    hourlyJobCount: number;
+    freelanceClientCount: number;
+    salariedJobCount: number;
+  };
 }
 
 interface TraceEntry {
@@ -253,7 +273,7 @@ if (fixtures.length === 0) {
   throw new Error(`No matching fixtures. Available IDs: ${allFixtures.map((fixture) => fixture.id).join(", ")}`);
 }
 
-const plan = FinancialPlanSchema.parse({
+const defaultPlan = FinancialPlanSchema.parse({
   name: "Alex",
   balance: 642,
   paycheck: 1840,
@@ -277,16 +297,24 @@ for (const fixture of fixtures) {
   for (let trial = 1; trial <= trialsPerScenario; trial += 1) {
     try {
   const startedAt = performance.now();
+  const asOf = fixture.asOf ?? "2026-08-17";
+  const fixturePlan = FinancialPlanSchema.parse(fixture.plan ?? defaultPlan);
+  const eventReplay = fixture.syntheticEventStream
+    ? replaySyntheticEventStream(fixturePlan, SyntheticEventStreamSchema.parse(fixture.syntheticEventStream))
+    : null;
+  const effectivePlan = eventReplay?.effectivePlan ?? fixturePlan;
   const response = await fetch(`${baseUrl}/api/agent`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       sessionId: `eval-${randomUUID().replaceAll("-", "")}-${fixture.id}`.slice(0, 64),
       message: fixture.message,
-      plan,
-      asOf: "2026-08-17",
+      plan: fixturePlan,
+      asOf,
       policySources: fixture.policySources ?? [],
       ...(fixture.monitoring ? { monitoring: fixture.monitoring } : {}),
+      ...(fixture.caseContinuation ? { caseContinuation: fixture.caseContinuation } : {}),
+      ...(fixture.syntheticEventStream ? { syntheticEventStream: fixture.syntheticEventStream } : {}),
       privacy: { consentToModel: true, ephemeral: true }
     }),
     signal: AbortSignal.timeout(135_000)
@@ -299,7 +327,7 @@ for (const fixture of fixtures) {
   }
 
   const recommendation = RecommendationSchema.parse(responseBody.recommendation);
-  const expectedAnalysis = analyzeCashflow(plan, "2026-08-17", DisruptionSchema.parse(fixture.disruption));
+  const expectedAnalysis = analyzeCashflow(effectivePlan, asOf, DisruptionSchema.parse(fixture.disruption));
   const completedTrace = responseBody.trace.filter((entry) => entry.phase === "completed");
   const toolStages: ToolStage[] = completedTrace.map((entry) => ({
     tool: entry.tool,
@@ -321,6 +349,12 @@ for (const fixture of fixtures) {
   const monitoringAnalysisIndex = completedTrace.findIndex(
     (entry) => entry.tool === "analyze_income_monitoring" && !entry.failed && entry.status !== "error"
   );
+  const syntheticEventStreamCalls = completedTrace.filter(
+    (entry) => entry.tool === "analyze_synthetic_event_stream" && !entry.failed && entry.status !== "error"
+  ).length;
+  const syntheticEventStreamIndex = completedTrace.findIndex(
+    (entry) => entry.tool === "analyze_synthetic_event_stream" && !entry.failed && entry.status !== "error"
+  );
   const primaryAnalysisIndex = completedTrace.findIndex(
     (entry) => entry.tool === "analyze_paycheck_scenario" && !entry.failed && entry.status !== "error"
   );
@@ -330,11 +364,30 @@ for (const fixture of fixtures) {
   const resolutionCaseIndex = completedTrace.findIndex(
     (entry) => entry.tool === "get_resolution_case" && !entry.failed && entry.status !== "error"
   );
-  const expectsResolutionCase = fixture.expectedResolutionCaseStatus !== undefined;
-  const expectedResolutionNextAction = fixture.expectedResolutionCaseStatus === "needs_confirmation"
+  const caseCompletionCalls = completedTrace.filter(
+    (entry) => entry.tool === "complete_resolution_case" && !entry.failed && entry.status !== "error"
+  ).length;
+  const caseCompletionIndex = completedTrace.findIndex(
+    (entry) => entry.tool === "complete_resolution_case" && !entry.failed && entry.status !== "error"
+  );
+  const verifierIndex = completedTrace.findIndex(
+    (entry) => entry.tool === "verify_financial_plan" && !entry.failed && entry.status !== "error"
+  );
+  const expectedInitialResolutionCaseStatus = fixture.expectedInitialResolutionCaseStatus
+    ?? fixture.expectedResolutionCaseStatus;
+  const expectedFinalResolutionCaseStatus = fixture.expectedFinalResolutionCaseStatus
+    ?? fixture.expectedResolutionCaseStatus;
+  const expectsResolutionCase = expectedInitialResolutionCaseStatus !== undefined;
+  const expectsMonitoring = fixture.monitoring !== undefined || fixture.syntheticEventStream !== undefined;
+  const expectsCompletion = fixture.expectedCaseCompletionAuthorized !== undefined;
+  const expectedResolutionNextAction = expectedFinalResolutionCaseStatus === "needs_confirmation"
     ? "confirm_or_correct_signal"
-    : fixture.expectedResolutionCaseStatus === "detected"
+    : expectedFinalResolutionCaseStatus === "detected"
       ? "calculate_options"
+      : expectedFinalResolutionCaseStatus === "monitoring"
+        ? "observe_outcome"
+        : expectedFinalResolutionCaseStatus === "resolved" || expectedFinalResolutionCaseStatus === "escalated"
+          ? "none"
       : null;
   const missingTools = fixture.expectedTools.filter((tool) => !successfulTools.has(tool));
   const failedTools = completedTrace.filter((entry) => entry.failed || entry.status === "error").map((entry) => entry.tool);
@@ -354,22 +407,44 @@ for (const fixture of fixtures) {
     httpSuccess: response.ok,
     expectedToolsUsed: missingTools.length === 0,
     exactlyOnePrimaryAnalysis: primaryAnalysisCalls === 1,
-    monitoringRoutingCorrect: fixture.monitoring ? monitoringAnalysisCalls === 1 : monitoringAnalysisCalls === 0,
-    monitoringPrecedesPlanning: fixture.monitoring
+    syntheticEventStreamRoutingCorrect: fixture.syntheticEventStream ? syntheticEventStreamCalls === 1 : syntheticEventStreamCalls === 0,
+    syntheticEventStreamOrderCorrect: fixture.syntheticEventStream
+      ? syntheticEventStreamIndex >= 0 && syntheticEventStreamIndex < monitoringAnalysisIndex
+      : true,
+    syntheticEventStreamGrounded: fixture.syntheticEventStream
+      ? recommendation.syntheticEventStream !== null
+        && recommendation.syntheticEventStream.checkpointCount === fixture.expectedSyntheticEventStream?.checkpointCount
+        && recommendation.syntheticEventStream.caseOpened === fixture.expectedSyntheticEventStream?.caseOpened
+        && recommendation.syntheticEventStream.completionReviewAvailable === fixture.expectedSyntheticEventStream?.completionReviewAvailable
+        && recommendation.syntheticEventStream.sourceKindCounts.hourlyJob === fixture.expectedSyntheticEventStream?.hourlyJobCount
+        && recommendation.syntheticEventStream.sourceKindCounts.freelanceClient === fixture.expectedSyntheticEventStream?.freelanceClientCount
+        && recommendation.syntheticEventStream.sourceKindCounts.salariedJob === fixture.expectedSyntheticEventStream?.salariedJobCount
+      : recommendation.syntheticEventStream === null,
+    monitoringRoutingCorrect: expectsMonitoring ? monitoringAnalysisCalls === 1 : monitoringAnalysisCalls === 0,
+    monitoringPrecedesPlanning: expectsMonitoring
       ? monitoringAnalysisIndex >= 0 && monitoringAnalysisIndex < primaryAnalysisIndex
       : true,
     resolutionCaseRoutingCorrect: expectsResolutionCase ? resolutionCaseCalls === 1 : resolutionCaseCalls === 0,
     resolutionCaseOrderCorrect: expectsResolutionCase
       ? monitoringAnalysisIndex < resolutionCaseIndex && resolutionCaseIndex < primaryAnalysisIndex
       : true,
-    monitoringDecisionGrounded: fixture.monitoring
+    monitoringDecisionGrounded: expectsMonitoring
       ? recommendation.monitoringDecision?.disposition === fixture.expectedMonitoringDisposition
       : recommendation.monitoringDecision === null,
     resolutionCaseGrounded: expectsResolutionCase
       ? recommendation.resolutionCase !== null
-        && recommendation.resolutionCase.status === fixture.expectedResolutionCaseStatus
+        && recommendation.resolutionCase.status === expectedFinalResolutionCaseStatus
         && recommendation.resolutionCase.nextRequiredAction === expectedResolutionNextAction
       : recommendation.resolutionCase === null,
+    caseCompletionRoutingCorrect: expectsCompletion ? caseCompletionCalls === 1 : caseCompletionCalls === 0,
+    caseCompletionOrderCorrect: expectsCompletion
+      ? verifierIndex >= 0 && verifierIndex < caseCompletionIndex
+      : true,
+    caseCompletionGrounded: expectsCompletion
+      ? recommendation.caseCompletion !== null
+        && recommendation.caseCompletion.closureAuthorized === fixture.expectedCaseCompletionAuthorized
+        && recommendation.caseCompletion.resultingStatus === expectedFinalResolutionCaseStatus
+      : recommendation.caseCompletion === null,
     noToolFailures: failedTools.length === 0,
     structuredOutputFirstTry: responseBody.metrics?.structuredOutputAttempts === 1
       && responseBody.metrics.structuredOutputFailures === 0,

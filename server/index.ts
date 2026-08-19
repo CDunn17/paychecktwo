@@ -51,7 +51,7 @@ const server = createServer(async (request, response) => {
       model: process.env.STRANDS_MODEL_ID ?? "global.anthropic.claude-sonnet-4-6",
       modelAccess: "unchecked",
       authentication: process.env.AWS_BEARER_TOKEN_BEDROCK ? "bedrock-api-key" : "aws-credential-chain",
-      contractVersion: 15,
+      contractVersion: 20,
       executionBudget: {
         timeoutMs: Number(process.env.STRANDS_TIMEOUT_MS ?? 120_000),
         verifierTimeoutMs: Number(process.env.STRANDS_VERIFIER_TIMEOUT_MS ?? 45_000),

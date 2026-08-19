@@ -2,7 +2,7 @@
 
 > A Strands early-warning and resolution agent that monitors expected cash flow, detects income disruptions before essential bills are at risk, and manages a verified response without judging the user's choices.
 
-**Project phase:** Strands-integrated income monitoring and resolution-case foundation<br>
+**Project phase:** Bounded multi-source event replay with verifier-bound case closure<br>
 **Last updated:** August 19, 2026
 
 ## The hackathon goal
@@ -30,7 +30,7 @@ The backend uses the official [`@strands-agents/sdk`](https://www.npmjs.com/pack
 | Strands capability | How Paycheck Two uses it |
 | --- | --- |
 | `Agent` and the model-driven loop | The orchestrator selects tools and iterates based on their results. |
-| Zod-backed function tools | Financial inputs are validated and calculations remain deterministic; the orchestrator now consumes one authoritative minimized monitoring result through `analyze_income_monitoring`. |
+| Zod-backed function tools | Financial inputs are validated and calculations remain deterministic; the orchestrator consumes one minimized event-stream replay through `analyze_synthetic_event_stream` and one authoritative final monitoring result through `analyze_income_monitoring`. |
 | Agent composition | Separate bounded Strands agents review policies/terms and verify the complete recommendation. |
 | Structured output | Every recommendation must pass a model-facing Zod contract and a deterministic application safety policy. |
 | Structured autonomy | Every option must expose an upside, downside, and priority fit; application code fixes the user as decision owner and supplies the neutral closing question. |
@@ -60,6 +60,9 @@ flowchart LR
     Preview --> Redact["Application redaction boundary"]
     Redact --> API["Local agent API"]
     API --> LocalMonitor["Local inference, monitoring, and minimization"]
+    LocalMonitor --> Replay["Bounded synthetic event replay"]
+    Replay --> StreamTool["Single-use minimized event-stream tool"]
+    StreamTool --> Orchestrator
     LocalMonitor --> MonitorTool["Single-use monitoring-analysis tool"]
     MonitorTool --> CaseState["Deterministic resolution-case state machine"]
     CaseState --> CaseTool["Read-only case-state tool"]
@@ -74,6 +77,8 @@ flowchart LR
     Relief --> Orchestrator
     Orchestrator --> Verifier["Bounded verifier-agent tool"]
     Verifier --> Orchestrator
+    Orchestrator --> Closure["Single-use deterministic completion tool"]
+    Closure --> CaseState
     Orchestrator --> Result["Validated case decision or action package"]
     Result --> OutputScan["Sensitive-output scan"]
     OutputScan --> UI
@@ -114,6 +119,15 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - [x] Application-owned eight-state resolution-case contract plus read-only `get_resolution_case` Strands tool
 - [x] Service enforcement that case retrieval occurs exactly once between monitoring and primary planning
 - [x] First genuine contract-v15 case-state trajectory: authoritative case retrieval, fixed opening status/next action, one verifier critique, and first-try structured output
+- [x] Strict synthetic continuation contract carrying only a validated prior case, matching version, and fixed outcome-confirmation category
+- [x] Deterministic completion evidence derived from current monitoring, with fixed unmet-criterion codes for identity, state, version, date, active disruption, protected risk, and verifier approval
+- [x] Single-use `complete_resolution_case` Strands tool that can run only after the actual independent verifier result exists
+- [x] Service enforcement that completion review occurs exactly once after verification and that application code injects the resulting case and completion assessment
+- [x] First genuine contract-v19 case-closure trajectory: seven required tools in order, one verified critique, application-authorized `resolved` state, first-try structured output, and every automatic gate passed
+- [x] Bounded fixture-only event-stream replay with strict source/event schemas, two-or-more checkpoints, a 90-day/64-event ceiling, and no raw descriptions or external identifiers
+- [x] Single-use `analyze_synthetic_event_stream` Strands tool exposing only source-kind counts, checkpoint status counts, application-owned case states, and completion availability
+- [x] Deterministic effective-balance updates and legal case progression from detection through options, user decision, preparation, follow-up, and verifier-gated closure
+- [x] First genuine contract-v20 event-stream trajectory: minimized replay before monitoring, eight required tools, one verified critique, application-authorized closure, and first-try structured output
 
 ### Deterministic financial tools — implemented
 
@@ -148,6 +162,7 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - [x] Generic model-facing income and obligation identifiers rather than caller-supplied source aliases, transaction IDs, or bill labels
 - [x] Explicit protected-bill selection; flexible obligations cannot create a protected-obligation case trigger
 - [x] Deterministic case-opening policy: uncertain active income signals require confirmation, protected-obligation risk is material, and other confirmed disruptions return `no_case`
+- [x] Multi-source synthetic replay covering hourly work, a freelance client, and a second job with partial, late, and on-time income observations across two monitoring checkpoints
 
 The monitoring path is connected to the genuine Strands loop, but its source remains caller-supplied synthetic normalized history. It has no bank, Zelle, Cash App, Venmo, biller, or scheduler connection and cannot initiate an external action.
 
@@ -162,8 +177,10 @@ The monitoring path is connected to the genuine Strands loop, but its source rem
 - [x] `resolved` transitions fail closed unless application code supplies verifier approval
 - [x] Monitoring opens `needs_confirmation` for uncertain signals, `detected` for material confirmed risk, and no case for non-material confirmed signals
 - [x] `get_resolution_case` exposes the current state to Strands without allowing the model to mutate it
+- [x] Current deterministic monitoring and the actual bounded verifier verdict jointly control synthetic closure through `complete_resolution_case`; the request and model cannot supply verifier approval
+- [x] A six-scenario deterministic fixture closes a prior monitoring-state case only after current disruption/risk counts reach zero and a fixed verified verdict is applied
 
-The current service initializes and exposes the opening state for one request; it does not yet persist a case across requests or let the model advance it. The next milestone is to define deterministic completion evidence, bind closure authorization to the actual verifier result, and then connect synthetic user/event inputs to the legal transition engine.
+The service can now initialize an opening state, accept a strictly validated fixture-only prior case, or locally replay a bounded synthetic multi-source timeline through legal case transitions and verifier-gated closure. It still does not durably persist a case across requests or expose a general mutation endpoint. The next milestone is payment-app-aware classification and a read-only level-1-to-3 handoff design; authenticated encrypted persistence remains outside the fixture path.
 
 ### Demonstration interface — implemented
 
@@ -217,8 +234,8 @@ The current service initializes and exposes the opening state for one request; i
 - [x] Add recurring-income inference from a bounded synthetic transaction history, with confidence, correction, and provenance
 - [x] Expose monitoring analysis as a Zod-backed Strands tool and require the orchestrator to open a case only for material or uncertain disruptions
 - [x] Define the resolution-case state machine: detected, needs-confirmation, options-ready, awaiting-decision, prepared, monitoring, resolved, or escalated
-- [ ] Add deterministic case completion criteria and require the independent verifier before closure
-- [ ] Build a synthetic event stream that demonstrates hourly income, freelance income, and multiple-job variability over time
+- [x] Add deterministic case completion criteria and require the actual independent verifier result before closure
+- [x] Build a bounded synthetic event stream that demonstrates hourly income, freelance income, and multiple-job variability over time
 - [ ] Add payment-app-aware classifications for income, reimbursements, transfers, and scheduled obligations without assuming that P2P activity is wages or a bill
 - [ ] Implement action levels 1–3 only: monitor, prepare, and official user-controlled handoff; do not execute a payment
 - [ ] Run genuine Bedrock-backed monitoring and resolution trajectories, then add deterministic, semantic, and adversarial evaluations
@@ -373,11 +390,13 @@ npm run eval:live -- --semantic
 npm run eval:semantic:adversarial
 ```
 
-`eval:fixtures` validates the deterministic setup without spending Bedrock tokens. It includes the first uncertain missing-income monitoring case. `eval:live` runs all scenarios through the local API and genuine Strands/Bedrock loop. One or more fixture IDs can be supplied when resuming a run:
+`eval:fixtures` validates the deterministic setup without spending Bedrock tokens. Its seven scenarios include an uncertain missing-income monitor, a verifier-bound synthetic case closure, and a multi-source event-stream replay. `eval:live` runs all scenarios through the local API and genuine Strands/Bedrock loop. One or more fixture IDs can be supplied when resuming a run:
 
 ```bash
 npm run eval:live -- late-paycheck-and-repair
 npm run eval:live -- uncertain-missing-income-monitor
+npm run eval:live -- verified-case-closure
+npm run eval:live -- variable-income-event-stream
 ```
 
 Repeated trials and a sanitized JSON report can be requested directly:
@@ -389,7 +408,7 @@ npm run eval:live -- --semantic --trials=3 --output=evals/results/my-semantic-ca
 npm run eval:semantic:adversarial -- --output=evals/results/my-adversarial-calibration.json
 ```
 
-The live runner uses a fixed `asOf` date and unique ephemeral session ID so results are replayable without old session history. It fails if an expected tool is missing, any tool fails, the primary analysis or supplied monitoring analysis is not called exactly once, monitoring does not precede case retrieval and planning, a required case is not retrieved exactly once, the application-owned monitoring disposition or case state differs from the fixture, structured output takes more than one attempt, the verifier is not applied, scenario numbers differ from deterministic calculations, policy findings lose their source grounding, approval policy is violated, the safety boundary is absent, or the agent does not finish with structured output. Repeated reports include pass rate, latency range/mean/standard deviation, cycle and tool-call distributions, token use, estimated cost, tool-stage durations, and content-free model-stage durations. If the server returns `AGENT_INCOMPLETE`, the runner preserves only fixed operational metadata—stop reason, elapsed time, cycles, token counts, tool/model stage names, durations, and completion state—rather than discarding the diagnostic or retaining request/response content.
+The live runner uses a fixed `asOf` date and unique ephemeral session ID so results are replayable without old session history. It fails if an expected tool is missing, any tool fails, the primary analysis or supplied monitoring analysis is not called exactly once, monitoring does not precede case retrieval and planning, a required case is not retrieved exactly once, a required completion review does not occur exactly once after the verifier, the application-owned monitoring disposition, final case state, or completion assessment differs from the fixture, structured output takes more than one attempt, the verifier is not applied, scenario numbers differ from deterministic calculations, policy findings lose their source grounding, approval policy is violated, the safety boundary is absent, or the agent does not finish with structured output. Repeated reports include pass rate, latency range/mean/standard deviation, cycle and tool-call distributions, token use, estimated cost, tool-stage durations, and content-free model-stage durations. If the server returns `AGENT_INCOMPLETE`, the runner preserves only fixed operational metadata—stop reason, elapsed time, cycles, token counts, tool/model stage names, durations, and completion state—rather than discarding the diagnostic or retaining request/response content.
 
 `--semantic` adds a separate evaluation-only Strands/Bedrock judge. The judge receives only synthetic fixture data and the candidate recommendation, treats that recommendation as untrusted data, and returns a strict Zod assessment. Application code also scans for the explicitly prohibited stock-praise phrases without relying on the judge, then applies the pass thresholds: all applicable quality scores must be at least 4/5, harmful-advice safety must be 5/5, any style or safety flag fails the run, and a policy scenario must score at least 4/5 for policy caution. Natural-language success criteria remain visible because the semantic judge complements rather than replaces human review and deterministic adversarial tests.
 
@@ -400,6 +419,20 @@ npm run eval:semantic:reclassify -- input-report.json output-report.json
 ```
 
 ## Latest live-agent results
+
+### Contract v20 multi-source event-stream smoke
+
+The first genuine event-stream trajectory replayed a bounded fixture containing hourly, freelance, and second-job income. Local deterministic code kept all 11 event records out of Strands, updated the synthetic balance, opened a material case at the first checkpoint, applied the legal options/decision/follow-up transitions, and reached zero active disruptions and zero protected-obligation risks at the second checkpoint. Strands received only the minimized replay summary through `analyze_synthetic_event_stream`, then retrieved final monitoring, case state, the effective financial snapshot, and exactly one primary analysis. The verifier returned `verified`; only then did `complete_resolution_case` advance the case from `monitoring` version 5 to `resolved` version 6.
+
+All automatic stream-routing, monitoring, case, completion, arithmetic-grounding, approval, safety, and structured-output gates passed. The run completed in 51.66 seconds over seven orchestrator cycles and eight tool calls, using 59,101 total tokens at an estimated $0.2066 before credits. The privacy-safe report is [`evals/results/2026-08-19-contract-v20-event-stream-smoke.json`](evals/results/2026-08-19-contract-v20-event-stream-smoke.json). This is proof of one complete Strands/Bedrock trajectory, not a reliability claim; repeated and adversarial stream trials remain next.
+
+### Contract v19 verifier-bound case closure
+
+The first genuine closure trajectory completed the full Strands route in the required order: `analyze_income_monitoring`, `get_resolution_case`, `get_financial_snapshot`, exactly one `analyze_paycheck_scenario`, exactly one actual `verify_financial_plan` critique, `complete_resolution_case`, and first-try structured output. Current deterministic monitoring reported zero active disruptions and zero protected-obligation risks, the verifier returned `verified`, and application code alone advanced the fixture case from `monitoring` version 5 to `resolved` version 6. Every routing, grounding, completion, approval, and safety check passed; no external or durable action was claimed.
+
+The passing run completed in 35.86 seconds over seven orchestrator cycles and seven tool calls, using 52,045 total tokens at an estimated $0.1758 before credits. The privacy-safe report is [`evals/results/2026-08-19-contract-v19-case-closure-smoke.json`](evals/results/2026-08-19-contract-v19-case-closure-smoke.json). This is one successful trajectory, not a reliability claim.
+
+Three preserved fail-closed iterations show why the verifier boundary matters. Contract v16 blocked closure on fixed `arithmetic`, `assumption`, and `external_action` corrections; v17 and v18 reduced the result to `arithmetic` but still left the case in `monitoring`. Contract v19 constrained the completion draft to the exact application-owned evidence and supplied the verifier with an authoritative minimized JSON record; it did not weaken or bypass any check. Those privacy-safe reports are [`v16`](evals/results/2026-08-19-contract-v16-case-closure-smoke.json), [`v17`](evals/results/2026-08-19-contract-v17-case-closure-smoke.json), and [`v18`](evals/results/2026-08-19-contract-v18-case-closure-smoke.json).
 
 ### Contract v15 resolution-case smoke
 
@@ -686,7 +719,8 @@ Safeguards currently implemented:
 - **Read-only scope:** Paycheck Two cannot transfer money, contact a biller, change a due date, apply for credit, or modify an account. It provides analysis and conditional options only.
 - **Deterministic financial arithmetic:** Code—not the model—calculates balances, obligations, shortfalls, safe-to-spend amounts, timelines, option impacts, conditional policy relief, recurring-income assessments, disruption events, and conservative/typical monitoring forecasts.
 - **Application-owned monitoring decision:** Strands must retrieve the authoritative monitoring result exactly once when supplied, but deterministic policy alone decides whether the signal is `no_case`, `needs_confirmation`, or `open_case`. The final response field is injected by application code, so the model cannot upgrade a non-material signal into a case.
-- **Application-owned case state:** Deterministic code initializes and transitions resolution cases, fixes each status's next required action, rejects stale or illegal changes, bounds history, and prevents unverified closure. Strands can inspect the current case exactly once through a read-only tool but cannot change, persist, close, escalate, or execute it.
+- **Minimized synthetic replay:** Event-level dates, amounts, IDs, observed-income matches, protected-bill references, and case-progress inputs stay in local deterministic code. Strands receives one bounded summary containing source-kind counts, checkpoint status/risk counts, fixed case states, and completion availability; it cannot replay, alter, or append an event.
+- **Application-owned case state and closure:** Deterministic code initializes and transitions resolution cases, fixes each status's next required action, rejects stale or illegal changes, bounds history, and prevents unverified closure. Strands inspects the current case through a read-only tool. For the synthetic continuation fixture only, a separate single-use tool may close a monitoring-state case after current deterministic monitoring reports zero active disruptions and zero protected-obligation risks and the actual captured verifier verdict is `verified`; neither the request nor the model can assert verifier approval.
 - **Mandatory independent verification:** The service rejects a recommendation unless the separate verifier agent completes one bounded critique. The verifier returns only fixed failed-check codes for arithmetic, essentials, assumptions, read-only actions, policy support, autonomy, and harmful advice; application code supplies correction instructions without retaining verifier prose.
 - **Application-enforced grounding:** The service records the authoritative primary calculation and rejects a final recommendation whose risk level, safe-to-spend amount, or daily flexible limit differs from it. This runtime boundary no longer depends on the verifier or evaluator noticing fabricated arithmetic.
 - **Structured safety contracts:** Zod schemas constrain requests, tools, policy findings, action types, final recommendations, and autonomy fields. Invalid agent output is rejected rather than shown as a completed plan.
@@ -716,17 +750,27 @@ Safeguards currently implemented:
 4. **Consent and control:** The safety preview now distinguishes local-only monitoring history from the derived categories sent through Strands and states that raw history is not transmitted to the model. Model transmission still requires explicit consent. Inference requires three distinct observations; inferred income remains excluded from the conservative forecast. Users can confirm, completely correct, or reject a pattern, and must explicitly identify which plan bills are protected.
 5. **Retention:** Raw history exists only in the parsed request and local inference call. The minimized monitoring result is held in the request-scoped in-memory tool store and deleted in `finally` on success, validation failure after storage, timeout, or model/tool failure. Strands file-session opt-in can retain model-visible conversation content, but not the application tool store or raw normalized history. No monitoring data is written to application files or reports.
 6. **Abuse and failure modes:** Schemas reject histories over 180 days, misaligned as-of dates, out-of-window records, unknown or duplicate overrides, unknown or duplicate protected bills, invalid horizons/dates, non-integer money, and impossible expected ranges. Reimbursements, transfers, unknown credits, and debits cannot create income patterns. Sparse history is not inferred; irregular history requires a complete correction. Same-day bills precede income. The monitoring tool is single-use, unavailable without stored context, and mandatory exactly once when context exists. False preclassification, source-alias collisions, stale patterns, and misclassified protected bills remain risks requiring correction controls.
-7. **Verification:** Deterministic tests cover inference, exclusion rules, corrections, redaction consistency, minimized tool output, uncertain and material opening decisions, the confirmed non-material `no_case` path, request alignment, protected-bill references, and explicit single-use routing instructions. The deterministic evaluation suite now contains five scenarios including an uncertain missing-income monitor. The first genuine Bedrock monitoring smoke run passed every routing, grounding, verification, safety, and structured-output gate; repeated trials and adversarial monitoring cases remain necessary before making a reliability claim.
+7. **Verification:** Deterministic tests cover inference, exclusion rules, corrections, redaction consistency, minimized tool output, uncertain and material opening decisions, the confirmed non-material `no_case` path, request alignment, protected-bill references, and explicit single-use routing instructions. The deterministic evaluation suite now contains seven scenarios, including an uncertain missing-income monitor, a verified synthetic closure, and a bounded multi-source event replay. Genuine Bedrock monitoring and closure smoke runs passed every routing, grounding, verification, safety, and structured-output gate; repeated trials and adversarial monitoring cases remain necessary before making a reliability claim.
+
+### Synthetic event-stream milestone safety boundary
+
+1. **Data inventory:** The fixture API can receive one generic stream ID, a start date, 2–12 generic income sources with fixed kind/cadence/expectation fields, plan-bill IDs selected as protected, and 2–64 fixed-type synthetic events over at most 90 ordered days. Events may contain a generic event/source/option ID, date, integer-cent observed-income amount, match confidence, monitoring horizon, fixed case-progress type, fixed escalation reason, or fixed outcome-confirmation category. Local code derives updated synthetic balance, checkpoint monitoring results, fixed case transitions, a completion candidate, and a minimized stream summary. No descriptions, counterparties, account/payment-app identifiers, policy text, credentials, or arbitrary event prose are accepted.
+2. **Minimization:** Event IDs, event-level dates/amounts, observed-income matches, protected bill references, and case-progress inputs never enter a prompt, tool result, trace, evaluation report, or final recommendation. Strands receives only source-kind counts, checkpoint dates and assessment/disruption/risk counts, fixed case status/version/next-action fields, and whether completion review is available. The final monitoring tool keeps its existing generic source/obligation boundary.
+3. **Trust boundary:** Caller-carried synthetic events cross the local API and are parsed and replayed in deterministic Node.js code. The request-scoped store holds only the effective plan, final minimized monitoring result, final case, completion evidence, and minimized replay summary. Amazon Bedrock receives that summary through `analyze_synthetic_event_stream`, followed by the existing monitoring/case/planning tools. No scheduler, browser stream store, database, bank, payment app, queue, AWS storage service, or external provider participates.
+4. **Consent and control:** The safety preview identifies the derived replay categories sent to Bedrock and separately identifies event-level inputs that stay local; explicit model-transmission consent remains mandatory. Case-decision and outcome-confirmation events are fixed fixture data, not authenticated durable user records. The user-facing result must describe the stream as a replay and cannot imply continuous monitoring or an external action.
+5. **Retention:** Raw synthetic events exist only in the parsed request and replay call. The minimized summary and derived final state are request-scoped and deleted with all other plan data in `finally` on success, validation error after storage, timeout, or tool/model failure. Evaluation fixtures intentionally persist only fictional input in source control; live reports omit the stream body and recommendation.
+6. **Abuse and failure modes:** Strict schemas reject extra/instruction-like fields, unsupported provenance, duplicate IDs, unknown source or protected-bill references, invalid dates/horizons, unordered or over-90-day streams, over-limit events/sources, mismatched generic labels, impossible expectation ranges, multiple/non-final outcome confirmations, and simultaneous normalized-history plus stream input. Replay fails closed on case events without a case, illegal state transitions, risky closure candidates, terminal mutation, or missing checkpoints. Observed income updates only the synthetic effective balance; no debit, payment, transfer, provider-contact, or arbitrary balance-adjustment event exists.
+7. **Verification:** Unit tests cover hourly/freelance/second-job replay, partial and late income, material opening risk, the legal five-version path to monitoring, verified closure, minimized summaries, request alignment, exclusive input modes, local-only disclosure, cloning/deletion, prompt-like extra fields, unknown sources, out-of-order and overlong streams, stale post-checkpoint events, past obligations, premature case events, and blocked risky closure. The seventh deterministic fixture requires one stream-summary tool before monitoring and the existing verifier-bound closure route. The genuine contract-v20 Bedrock trajectory passed every automatic gate; repeated and adversarial stream trials remain necessary before making a reliability claim.
 
 ### Resolution-case milestone safety boundary
 
-1. **Data inventory:** The state machine receives one application-generated generic case ID, version, fixed status and next-action code, bounded dates, monitoring trigger reason/count fields, an optional generic selected-option ID, a fixed terminal reason, and at most 32 fixed-code transition records. It derives only the next validated state. It receives no transaction history, account identifiers, bill labels, prompts, recommendations, policy content, or user prose.
-2. **Minimization:** Strands receives the same minimized case object through `get_resolution_case`; no transition input or application control is exposed to the model. The status and fixed next action provide the orchestration evidence needed without sending underlying monitoring history again.
-3. **Trust boundary:** Case initialization and transitions occur in deterministic Node.js code. The opening case is held in the request-scoped in-memory tool store, read by Strands/Bedrock once, injected into the final response by application code, and omitted from evaluation reports except for fixed expected-state pass/fail checks. No database, AWS storage, browser case store, scheduler, or external service receives it.
-4. **Consent and control:** The existing safety preview now names derived resolution-case status/history among the categories sent to Strands. Model transmission still requires explicit consent. User decisions are represented only by a generic option ID in the pure engine; no UI or API transition endpoint is enabled yet, so the agent cannot claim a user chose or approved anything.
-5. **Retention:** The opening case is deleted with the plan and monitoring result in the service `finally` block on success or failure. The pure transition function has no storage. Durable cross-request case persistence requires a separate encrypted retention, correction, export, deletion, and tenant-isolation design.
-6. **Abuse and failure modes:** Strict schemas reject extra fields, forged status/next-action pairs, broken or backward-dated history, mismatched versions, and terminal-state inconsistency. Transition policy rejects stale versions, illegal paths, backward dates, terminal mutation, histories over 32 records, and resolution without verifier authorization. The model-facing tool is single-use and read-only, and the service rejects missing, late, or duplicate retrieval.
-7. **Verification:** Tests cover all eight states, the normal decision/follow-up path, replanning, confirmation, verified false-positive closure, escalation, stale versions, illegal and backward-dated transitions, terminal mutation, forged history, extra fields, request-store cloning/deletion, and unverified closure. The deterministic fixture requires the read-only case tool and expected opening state. The genuine contract-v15 smoke run passed every case-routing, grounding, verification, safety, and structured-output gate; its preceding timeout remains preserved as reliability evidence.
+1. **Data inventory:** The state machine receives one application-generated generic case ID, version, fixed status and next-action code, bounded dates, monitoring trigger reason/count fields, an optional generic selected-option ID, a fixed terminal reason, and at most 32 fixed-code transition records. Synthetic continuation adds only a literal fixture provenance, a matching expected version, and `risk_cleared` or `resolved_externally` confirmation. Local code derives current active-disruption and protected-risk counts; the request cannot submit those completion counts or a verifier-approval flag. No transaction history, account identifiers, bill labels, prompts, recommendations, policy content, or user prose enters the case contract.
+2. **Minimization:** Strands receives the minimized case through `get_resolution_case`, current fixed-code monitoring evidence, and the fixed outcome-confirmation category in the invocation notice. `complete_resolution_case` accepts only the session ID. No transition event, financial amount, raw history, verifier flag, or application control is exposed as a model-supplied tool parameter.
+3. **Trust boundary:** Case initialization, completion-evidence derivation, and transitions occur in deterministic Node.js code. The request-scoped store supplies minimized state to Strands/Bedrock and holds completion evidence locally. The completion tool can read the verifier result captured inside the same runtime only after the verifier has executed. Application code injects the final case and assessment; evaluation reports retain only fixed pass/fail checks and operational metrics. No database, AWS storage, browser case store, scheduler, or external service receives the case.
+4. **Consent and control:** The safety preview names derived case status/history, prior synthetic version, fixed confirmation category, and completion criteria among the categories sent to Strands. Model transmission still requires explicit consent. The fixture's confirmation is explicit and fixed-code, but this is not an authenticated durable user-decision record. The result cannot imply that money moved or that an outside party was contacted.
+5. **Retention:** The case and completion evidence are deleted with the plan and monitoring result in the service `finally` block on success or failure. The pure transition and completion functions have no storage. A caller-carried prior case exists only to demonstrate the lifecycle with synthetic data; durable cross-request persistence requires separate authenticated, encrypted retention, correction, export, deletion, and tenant-isolation design.
+6. **Abuse and failure modes:** Strict schemas reject extra fields, forged status/next-action pairs, broken or backward-dated history, mismatched versions, unsupported provenance, non-monitoring completion candidates, and terminal-state inconsistency. Completion remains blocked with fixed codes for case-ID mismatch, stale version, backward date, active disruption, protected-obligation risk, or a non-passing verifier. The service rejects missing, early, late, duplicate, or unrequested completion calls. A syntactically valid caller-carried fixture can still be fabricated, so this boundary is explicitly not production persistence or authenticated evidence.
+7. **Verification:** Tests cover all eight states, normal decision/follow-up and replanning paths, closure and escalation, malformed cases, cloned/deleted request storage, strict completion evidence, every completion blocker, and a verified closure. The six deterministic fixtures include a complete monitoring-to-verifier-to-closure contract and require the completion tool after the verifier. The genuine contract-v19 closure trajectory passed every automatic gate after three preserved fail-closed verifier iterations. Repeated closure trials and adversarial completion cases remain necessary before making a reliability claim.
 
 Current safety limitations:
 
@@ -734,7 +778,7 @@ Current safety limitations:
 - Existing browser data is not automatically erased when private mode is enabled; the user-facing deletion control removes it. Browser local storage and opt-in Strands file sessions are not appropriate persistence for real financial data.
 - The prototype has no user authentication, tenant isolation, encrypted application storage, consent ledger, or export workflow.
 - Recurring-income inference begins after a transaction has been assigned an opaque source alias and fixed classification. The current prototype does not safely normalize or classify raw provider transaction descriptions, and a mistaken upstream classification can still produce a false candidate pattern.
-- The API-level monitoring path accepts only synthetic normalized history. There is not yet a scheduler, event stream, encrypted case store, browser monitoring/case editor, or provider adapter. The state machine exists, but the live service currently exposes only its request-scoped opening state; cross-request advancement is not enabled.
+- The API-level monitoring path accepts only synthetic normalized history or the new bounded caller-carried synthetic replay. There is no scheduler, live event source, encrypted case store, browser monitoring/case editor, or provider adapter. Event-stream case progression and the prior-case closure fixture are deliberately not authenticated persistence; general cross-request advancement is not enabled.
 - Relevant plan and policy content, after the first-cut redaction boundary, is sent to the configured Bedrock model when the agent evaluates it.
 - Pasted text is supported, but secure file/PDF ingestion and page-level citations are not yet implemented.
 - Contract v12 passed 11/12 repeated full-campaign trajectories, and the exact remaining schema failure passed 3/3 after the contract-v13 repair. Contract v13 has not yet been rerun three times across all four scenarios, so production reliability is not established.

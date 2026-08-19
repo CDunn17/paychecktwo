@@ -6,6 +6,7 @@ import { PlanStore } from "../src/agent/plan-store.js";
 import { createFinancialTools } from "../src/agent/tools.js";
 
 const browserSource = await readFile(new URL("../app.js", import.meta.url), "utf8");
+const agentSource = await readFile(new URL("../src/agent/create-agent.ts", import.meta.url), "utf8");
 
 test("orchestrator requires pressure and option tools for open-ended reduced-income planning", () => {
   assert.match(
@@ -19,19 +20,23 @@ test("financial toolset exposes one structurally exclusive primary calculation",
   const names = createFinancialTools(new PlanStore()).map((candidate) => candidate.name);
   assert.equal(names.filter((name) => name === "analyze_paycheck_scenario").length, 1);
   assert.equal(names.filter((name) => name === "analyze_income_monitoring").length, 1);
+  assert.equal(names.filter((name) => name === "analyze_synthetic_event_stream").length, 1);
   assert.equal(names.filter((name) => name === "get_resolution_case").length, 1);
+  assert.equal((agentSource.match(/name: "complete_resolution_case"/g) ?? []).length, 1);
   assert.equal(names.includes("build_cashflow_timeline"), false);
   assert.equal(names.includes("simulate_disruption"), false);
 });
 
 test("monitoring routing is explicit, single-use, and application-controlled", () => {
   assert.match(ORCHESTRATOR_PROMPT, /call analyze_income_monitoring exactly once before planning/i);
+  assert.match(ORCHESTRATOR_PROMPT, /call analyze_synthetic_event_stream exactly once before analyze_income_monitoring/i);
   assert.match(ORCHESTRATOR_PROMPT, /caseDecision is application-owned and authoritative/);
   assert.match(ORCHESTRATOR_PROMPT, /do not say a case should open when it returns no_case/);
   assert.match(ORCHESTRATOR_PROMPT, /never infer a disruption from spending behavior/i);
   assert.match(VERIFIER_PROMPT, /contradicts its application-owned caseDecision/);
   assert.match(VERIFIER_PROMPT, /treats an inferred signal as confirmed/);
   assert.match(ORCHESTRATOR_PROMPT, /call get_resolution_case exactly once after analyze_income_monitoring and before planning/i);
+  assert.match(ORCHESTRATOR_PROMPT, /call complete_resolution_case exactly once after verify_financial_plan and before final structured output/i);
   assert.match(ORCHESTRATOR_PROMPT, /Do not claim the case advanced, closed, escalated, persisted, or triggered an external action/);
   assert.match(VERIFIER_PROMPT, /contradicts its application-owned caseDecision, status, or nextRequiredAction/);
 });

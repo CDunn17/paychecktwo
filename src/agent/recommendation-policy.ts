@@ -5,6 +5,8 @@ import {
   type MonitoringCaseDecision,
   type Recommendation,
   type ResolutionCase,
+  type ResolutionCaseCompletionAssessment,
+  type SyntheticEventStreamSummary,
   type VerifierResult
 } from "./schemas.js";
 import type { CashflowAnalysis } from "./calculations.js";
@@ -39,7 +41,9 @@ export function finalizeRecommendation(
   rawRecommendation: unknown,
   verifierResult: VerifierResult,
   monitoringDecision: MonitoringCaseDecision | null = null,
-  resolutionCase: ResolutionCase | null = null
+  resolutionCase: ResolutionCase | null = null,
+  caseCompletion: ResolutionCaseCompletionAssessment | null = null,
+  syntheticEventStream: SyntheticEventStreamSummary | null = null
 ): Recommendation {
   const recommendation = AgentRecommendationSchema.parse(rawRecommendation);
   const verificationNote = verifierResult.verdict === "verified"
@@ -61,6 +65,8 @@ export function finalizeRecommendation(
     },
     monitoringDecision,
     resolutionCase,
+    caseCompletion,
+    syntheticEventStream,
     disclaimer: "Planning guidance, not financial advice."
   });
 }

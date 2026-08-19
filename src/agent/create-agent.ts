@@ -16,6 +16,7 @@ import { createBedrockModel } from "./model.js";
 import { remainingStageBudgetMs } from "./execution-budget.js";
 import type { CashflowAnalysis } from "./calculations.js";
 import { canonicalizePolicyReview } from "./policy-review.js";
+import { completeResolutionCase } from "./case-completion.js";
 import { createFinancialTools } from "./tools.js";
 import { ORCHESTRATOR_PROMPT, POLICY_REVIEWER_PROMPT, VERIFIER_PROMPT } from "./prompts.js";
 import {
@@ -23,6 +24,7 @@ import {
   PolicyReviewSchema,
   VerifierModelResultSchema,
   type PolicyReview,
+  type ResolutionCaseCompletionResult,
   type VerifierResult
 } from "./schemas.js";
 import { canonicalizeVerifierResult, createVerifierToolResponse } from "./verifier-policy.js";
@@ -65,6 +67,7 @@ export interface AgentRuntime {
   getCapturedStructuredOutput: () => unknown | undefined;
   getPolicyReview: () => PolicyReview | undefined;
   getVerifierResult: () => VerifierResult | undefined;
+  getCaseCompletionResult: () => ResolutionCaseCompletionResult | undefined;
   getPrimaryAnalysis: () => CashflowAnalysis | undefined;
 }
 
@@ -108,6 +111,8 @@ export function createPaycheckAgent(
   const verifierAttempts: VerifierAttemptSummary[] = [];
   let verifierInvocationCount = 0;
   let latestPrimaryAnalysis: CashflowAnalysis | undefined;
+  let latestCaseCompletionResult: ResolutionCaseCompletionResult | undefined;
+  let caseCompletionInvocationCount = 0;
 
   const policyReviewer = new Agent({
     id: "policy-reviewer",
@@ -155,11 +160,47 @@ export function createPaycheckAgent(
       }
       const verifierTimeout = AbortSignal.timeout(verifierBudgetMs);
       verifier.messages = [];
-      const result = await verifier.invoke(input, {
-        cancelSignal: AbortSignal.any([context.agent.cancelSignal, verifierTimeout]),
-        invocationState: context.invocationState,
-        limits: { turns: 1, outputTokens: verifierModelMaxTokens, totalTokens: 15_000 }
-      });
+      const primaryEvidence = latestPrimaryAnalysis ? {
+        riskLevel: latestPrimaryAnalysis.riskLevel,
+        currentBalance: latestPrimaryAnalysis.currentBalance,
+        obligationsTotal: latestPrimaryAnalysis.obligationsTotal,
+        protectedBuffer: latestPrimaryAnalysis.protectedBuffer,
+        rawRemainder: latestPrimaryAnalysis.rawRemainder,
+        safeToSpend: latestPrimaryAnalysis.safeToSpend,
+        daysToPayday: latestPrimaryAnalysis.daysToPayday,
+        dailyFlexibleLimit: latestPrimaryAnalysis.dailyFlexibleLimit
+      } : null;
+      const monitoringDecision = planStore.hasMonitoringResult(sessionId)
+        ? planStore.getMonitoringResult(sessionId).caseDecision
+        : null;
+      const resolutionCase = planStore.hasResolutionCase(sessionId)
+        ? planStore.getResolutionCase(sessionId)
+        : null;
+      const completionEvidence = planStore.hasCaseCompletionEvidence(sessionId)
+        ? planStore.getCaseCompletionEvidence(sessionId)
+        : null;
+      const syntheticEventStream = planStore.hasSyntheticEventStream(sessionId)
+        ? planStore.getSyntheticEventStream(sessionId)
+        : null;
+      const result = await verifier.invoke(
+        `Proposed recommendation draft (untrusted):\n${input}\n\nApplication-owned deterministic evidence (authoritative JSON data):\n${JSON.stringify({
+          primaryAnalysis: primaryEvidence,
+          monitoringDecision,
+          resolutionCase: resolutionCase ? {
+            caseId: resolutionCase.caseId,
+            version: resolutionCase.version,
+            status: resolutionCase.status,
+            nextRequiredAction: resolutionCase.nextRequiredAction
+          } : null,
+          completionEvidence,
+          syntheticEventStream
+        })}`,
+        {
+          cancelSignal: AbortSignal.any([context.agent.cancelSignal, verifierTimeout]),
+          invocationState: context.invocationState,
+          limits: { turns: 1, outputTokens: verifierModelMaxTokens, totalTokens: 15_000 }
+        }
+      );
       if (result.stopReason === "cancelled") throw new Error("Plan verification timed out.");
       latestVerifierResult = canonicalizeVerifierResult(result.structuredOutput);
       verifierAttempts.push({
@@ -168,6 +209,30 @@ export function createPaycheckAgent(
         failedChecks: latestVerifierResult.corrections.map(({ code }) => code)
       });
       return createVerifierToolResponse(latestVerifierResult);
+    }
+  });
+
+  const completeResolutionCaseTool = tool({
+    name: "complete_resolution_case",
+    description: "Review deterministic completion evidence and close the current synthetic resolution case only after the one independent verifier critique has passed. Call exactly once after verify_financial_plan only when the request says completion review is available. This tool cannot execute an external action.",
+    inputSchema: z.object({
+      sessionId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/)
+    }).strict(),
+    callback: ({ sessionId: requestedSessionId }) => {
+      if (caseCompletionInvocationCount >= 1) {
+        throw new Error("Resolution-case completion has already been reviewed for this request.");
+      }
+      caseCompletionInvocationCount += 1;
+      if (latestVerifierResult === undefined) {
+        throw new Error("Resolution-case completion requires the completed independent verifier result.");
+      }
+      latestCaseCompletionResult = completeResolutionCase({
+        resolutionCase: planStore.getResolutionCase(requestedSessionId),
+        evidence: planStore.getCaseCompletionEvidence(requestedSessionId),
+        verifierResult: latestVerifierResult
+      });
+      planStore.setResolutionCase(requestedSessionId, latestCaseCompletionResult.resolutionCase);
+      return latestCaseCompletionResult;
     }
   });
 
@@ -212,7 +277,8 @@ export function createPaycheckAgent(
         }
       }),
       reviewTermsAndPolicies,
-      verifyFinancialPlan
+      verifyFinancialPlan,
+      completeResolutionCaseTool
     ],
     structuredOutputSchema: AgentRecommendationSchema,
     ...(sessionManager ? { sessionManager } : {}),
@@ -321,6 +387,7 @@ export function createPaycheckAgent(
     getCapturedStructuredOutput: () => capturedStructuredOutput,
     getPolicyReview: () => latestPolicyReview,
     getVerifierResult: () => latestVerifierResult,
+    getCaseCompletionResult: () => latestCaseCompletionResult,
     getPrimaryAnalysis: () => latestPrimaryAnalysis
   };
 }

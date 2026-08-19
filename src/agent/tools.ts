@@ -25,6 +25,7 @@ export function createFinancialTools(
 ) {
   let monitoringAnalysisCalls = 0;
   let resolutionCaseCalls = 0;
+  let syntheticEventStreamCalls = 0;
   const getFinancialSnapshot = tool({
     name: "get_financial_snapshot",
     description: "Load the authoritative balance, paycheck, buffer, payday, and bills for a Paycheck Two session. Always call this before analysis.",
@@ -58,6 +59,19 @@ export function createFinancialTools(
       const result = planStore.getMonitoringResult(sessionId);
       observer.onMonitoringAnalysis?.();
       return result;
+    }
+  });
+
+  const analyzeSyntheticEventStream = tool({
+    name: "analyze_synthetic_event_stream",
+    description: "Load the one authoritative minimized replay summary for a bounded synthetic event stream. Call exactly once before analyze_income_monitoring only when the request says a synthetic stream is available. Event-level IDs, dates, amounts, and case-progress inputs remain local; this tool cannot mutate a case or execute an external action.",
+    inputSchema: SessionInput,
+    callback: ({ sessionId }) => {
+      if (syntheticEventStreamCalls >= 1) {
+        throw new Error("The synthetic event stream has already been retrieved for this request.");
+      }
+      syntheticEventStreamCalls += 1;
+      return planStore.getSyntheticEventStream(sessionId);
     }
   });
 
@@ -122,6 +136,7 @@ export function createFinancialTools(
 
   return [
     getFinancialSnapshot,
+    analyzeSyntheticEventStream,
     analyzeIncomeMonitoring,
     getResolutionCase,
     analyzePaycheckScenario,

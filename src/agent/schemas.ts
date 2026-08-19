@@ -466,6 +466,102 @@ export const ResolutionCaseSchema = z.object({
   }
 });
 
+export const ResolutionOutcomeConfirmationSchema = z.enum([
+  "risk_cleared",
+  "resolved_externally"
+]);
+
+export const ResolutionCaseCompletionEvidenceSchema = z.object({
+  caseId: z.string().regex(/^case-[a-z0-9-]{1,64}$/),
+  expectedVersion: z.number().int().positive(),
+  asOf: ResolutionCaseDateSchema,
+  outcomeConfirmation: ResolutionOutcomeConfirmationSchema,
+  activeDisruptionCount: z.number().int().nonnegative(),
+  protectedObligationRiskCount: z.number().int().nonnegative()
+}).strict();
+
+export const ResolutionCaseCompletionCriterionSchema = z.enum([
+  "case_identity_mismatch",
+  "case_not_monitoring",
+  "stale_case_version",
+  "outcome_date_precedes_case",
+  "active_disruption_remaining",
+  "protected_obligation_risk_remaining",
+  "verifier_not_approved"
+]);
+
+export const ResolutionCaseCompletionAssessmentSchema = z.object({
+  reviewed: z.literal(true),
+  closureAuthorized: z.boolean(),
+  unmetCriteria: z.array(ResolutionCaseCompletionCriterionSchema).max(7),
+  resultingStatus: ResolutionCaseStatusSchema
+}).strict().superRefine((assessment, context) => {
+  if (assessment.closureAuthorized !== (assessment.unmetCriteria.length === 0)) {
+    context.addIssue({
+      code: "custom",
+      path: ["closureAuthorized"],
+      message: "Closure is authorized only when every fixed completion criterion passes."
+    });
+  }
+  if (assessment.closureAuthorized && assessment.resultingStatus !== "resolved") {
+    context.addIssue({
+      code: "custom",
+      path: ["resultingStatus"],
+      message: "An authorized closure must produce the resolved state."
+    });
+  }
+  if (!assessment.closureAuthorized && assessment.resultingStatus === "resolved") {
+    context.addIssue({
+      code: "custom",
+      path: ["resultingStatus"],
+      message: "A blocked closure cannot produce the resolved state."
+    });
+  }
+});
+
+export const ResolutionCaseCompletionResultSchema = z.object({
+  assessment: ResolutionCaseCompletionAssessmentSchema,
+  resolutionCase: ResolutionCaseSchema
+}).strict();
+
+export const SyntheticEventStreamFrameSchema = z.object({
+  checkpointOn: ResolutionCaseDateSchema,
+  assessmentStatusCounts: z.object({
+    pending: z.number().int().nonnegative(),
+    gracePeriod: z.number().int().nonnegative(),
+    met: z.number().int().nonnegative(),
+    late: z.number().int().nonnegative(),
+    reduced: z.number().int().nonnegative(),
+    missing: z.number().int().nonnegative()
+  }).strict(),
+  disposition: z.enum(["no_case", "needs_confirmation", "open_case"]),
+  activeDisruptionCount: z.number().int().nonnegative(),
+  uncertainDisruptionCount: z.number().int().nonnegative(),
+  protectedObligationRiskCount: z.number().int().nonnegative(),
+  caseStatus: ResolutionCaseStatusSchema.nullable(),
+  nextRequiredAction: ResolutionCaseNextActionSchema.nullable(),
+  caseVersion: z.number().int().positive().nullable()
+}).strict();
+
+export const SyntheticEventStreamSummarySchema = z.object({
+  streamId: z.string().regex(/^stream-[a-z0-9-]{1,64}$/),
+  provenance: z.literal("synthetic_fixture"),
+  sourceKindCounts: z.object({
+    hourlyJob: z.number().int().nonnegative(),
+    salariedJob: z.number().int().nonnegative(),
+    freelanceClient: z.number().int().nonnegative(),
+    benefit: z.number().int().nonnegative(),
+    other: z.number().int().nonnegative()
+  }).strict(),
+  eventCount: z.number().int().positive().max(64),
+  checkpointCount: z.number().int().min(2).max(32),
+  caseOpened: z.boolean(),
+  frames: z.array(SyntheticEventStreamFrameSchema).min(2).max(32),
+  finalCaseStatus: ResolutionCaseStatusSchema.nullable(),
+  finalNextRequiredAction: ResolutionCaseNextActionSchema.nullable(),
+  completionReviewAvailable: z.boolean()
+}).strict();
+
 const RecommendationCoreSchema = z.object({
   summary: z.string().min(1).describe("A concise, empathetic answer grounded in tool results"),
   riskLevel: z.enum(["stable", "tight", "shortfall"]).describe("The analyze_paycheck_scenario riskLevel before optional plan changes"),
@@ -503,6 +599,8 @@ export const RecommendationSchema = RecommendationCoreSchema.omit({ recommendedA
   }),
   monitoringDecision: MonitoringCaseDecisionSchema.nullable().default(null),
   resolutionCase: ResolutionCaseSchema.nullable().default(null),
+  caseCompletion: ResolutionCaseCompletionAssessmentSchema.nullable().default(null),
+  syntheticEventStream: SyntheticEventStreamSummarySchema.nullable().default(null),
   decisionSupport: FinalDecisionSupportSchema,
   disclaimer: z.literal("Planning guidance, not financial advice.")
 });
@@ -540,5 +638,10 @@ export type MonitoringCaseDecision = z.infer<typeof MonitoringCaseDecisionSchema
 export type ResolutionCaseStatus = z.infer<typeof ResolutionCaseStatusSchema>;
 export type ResolutionCaseTerminalReason = z.infer<typeof ResolutionCaseTerminalReasonSchema>;
 export type ResolutionCase = z.infer<typeof ResolutionCaseSchema>;
+export type ResolutionOutcomeConfirmation = z.infer<typeof ResolutionOutcomeConfirmationSchema>;
+export type ResolutionCaseCompletionEvidence = z.infer<typeof ResolutionCaseCompletionEvidenceSchema>;
+export type ResolutionCaseCompletionAssessment = z.infer<typeof ResolutionCaseCompletionAssessmentSchema>;
+export type ResolutionCaseCompletionResult = z.infer<typeof ResolutionCaseCompletionResultSchema>;
+export type SyntheticEventStreamSummary = z.infer<typeof SyntheticEventStreamSummarySchema>;
 export type PlanningSafetyPreviewRequest = z.infer<typeof PlanningSafetyPreviewRequestSchema>;
 export type PlanningAgentRequest = z.infer<typeof PlanningAgentRequestSchema>;
