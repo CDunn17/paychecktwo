@@ -3,7 +3,7 @@ import { IsoDateSchema } from "./schemas.js";
 
 const MONEY_LIMIT_CENTS = 1_000_000_000;
 
-const MonitoringDateSchema = IsoDateSchema.refine((value) => {
+export const MonitoringDateSchema = IsoDateSchema.refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }, "Use a valid calendar date in YYYY-MM-DD format");

@@ -51,7 +51,8 @@ This is **evaluation-driven development**, not model training: Paycheck Two does
 
 ```mermaid
 flowchart LR
-    Feed["Synthetic event feed now; read-only adapters later"] --> Monitor["Income expectation monitor"]
+    Feed["Bounded synthetic history now; read-only adapters later"] --> Inference["Recurring-income inference and user correction"]
+    Inference --> Monitor["Income expectation monitor"]
     Monitor --> Detection["Deterministic disruption and coverage analysis"]
     Detection --> Case["Resolution case"]
     User["User corrections and decisions"] --> UI["Demo dashboard"]
@@ -118,6 +119,13 @@ Financial calculations are deliberately outside the model. The model decides *wh
 ### Synthetic income-monitoring foundation — implemented
 
 - [x] Strict Zod contracts for expected income, observed deposits, upcoming obligations, monitoring confidence, and integer-cent amounts
+- [x] A separate bounded normalized-history contract with opaque source aliases, fixed transaction classifications, and synthetic provenance
+- [x] Recurring-income inference limited to 180 days and at least three distinct observation dates per automatic pattern
+- [x] Deterministic weekly, biweekly, semimonthly, monthly, and irregular cadence classification
+- [x] Same-day split-deposit aggregation, lower-quartile minimums, median typical amounts, and stable-versus-variable amount evidence
+- [x] Pattern provenance containing only the bounded window, opaque synthetic transaction IDs, observation dates, and fixed evidence codes
+- [x] Explicit user decisions to confirm, completely correct, or reject a pattern; sparse or irregular history cannot be silently confirmed
+- [x] Reimbursements, transfers, unknown credits, and debits excluded from automatic income inference
 - [x] Separate expected-income ranges and grace periods for hourly jobs, salaried jobs, freelance clients, benefits, and other sources
 - [x] Independent assessment of multiple jobs or clients as `pending`, `grace_period`, `met`, `late`, `reduced`, or `missing`
 - [x] Fixed-code disruption events for late-pending, late, reduced, and missing income
@@ -127,7 +135,7 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - [x] Deterministic identification of protected obligations placed at risk
 - [x] Synthetic unit coverage for hourly variability, partial pay, missing freelance income, multiple sources, inferred income, and same-day timing
 
-This first slice has no bank, Zelle, Cash App, Venmo, biller, scheduler, browser-storage, or model connection. It accepts only caller-supplied synthetic structures, returns fixed structured facts, performs no logging or persistence, and cannot initiate an external action. Wiring it into the Strands loop is the next milestone.
+This foundation has no bank, Zelle, Cash App, Venmo, biller, scheduler, browser-storage, or model connection. It accepts only caller-supplied synthetic normalized structures, returns fixed structured facts, performs no logging or persistence, and cannot initiate an external action. Wiring it into the Strands loop is the next milestone.
 
 ### Demonstration interface — implemented
 
@@ -178,7 +186,7 @@ This first slice has no bank, Zelle, Cash App, Venmo, biller, scheduler, browser
 - [x] Reframe Paycheck Two as a consent-based financial early-warning and resolution agent rather than a one-response planner
 - [x] Define the first synthetic monitoring boundary and integer-cent income/obligation contracts
 - [x] Implement deterministic variable-income assessment, disruption events, and conservative-versus-typical coverage forecasts
-- [ ] Add recurring-income inference from a bounded synthetic transaction history, with confidence, correction, and provenance
+- [x] Add recurring-income inference from a bounded synthetic transaction history, with confidence, correction, and provenance
 - [ ] Expose monitoring analysis as a Zod-backed Strands tool and require the orchestrator to open a case only for material or uncertain disruptions
 - [ ] Define the resolution-case state machine: detected, needs-confirmation, options-ready, awaiting-decision, prepared, monitoring, resolved, or escalated
 - [ ] Add deterministic case completion criteria and require the independent verifier before closure
@@ -605,6 +613,8 @@ The desired behavior is to review the remembered policy as a lead, preserve the 
 │       ├── plan-store.ts          # Request-scoped financial snapshot store
 │       ├── policy-review.ts       # Canonical policy-source enforcement
 │       ├── prompts.ts             # Orchestrator, policy reviewer, and verifier behavior
+│       ├── recurring-income-schemas.ts # Normalized-history, inference, and correction contracts
+│       ├── recurring-income.ts    # Deterministic recurring-income inference
 │       ├── recommendation-policy.ts # Approval, grounding, and finalization policy
 │       ├── safety.ts              # Input inspection/redaction, consent preview, and output scan
 │       ├── schemas.ts             # Zod request and structured-output contracts
@@ -655,19 +665,20 @@ Safeguards currently implemented:
 
 ### Monitoring milestone safety boundary
 
-1. **Data inventory:** The new pure module receives dates, integer-cent balances, protected buffers, expected income ranges, confidence labels, observed-income matches, and upcoming obligations. It derives fixed statuses, disruption event codes, forecast balances, and opaque obligation IDs at risk. It sends, logs, caches, and persists nothing.
-2. **Minimization:** The contract does not accept account or routing numbers, payment credentials, payment-app handles, raw merchant descriptions, names, addresses, or free-form transaction notes. Labels are bounded and synthetic in current tests; future adapters must replace sensitive provider values with local categories and opaque IDs before this boundary.
+1. **Data inventory:** The pure modules receive a maximum 180-day history of opaque transaction IDs, dates, integer-cent amounts, direction, opaque source aliases, fixed classifications, and synthetic provenance; optional user decisions; balances, protected buffers, expected income ranges, confidence, observed-income matches, and upcoming obligations. They derive cadences, amount ranges, fixed evidence codes, confirmation state, disruption codes, forecast balances, and opaque obligation IDs at risk. They send, log, cache, and persist nothing.
+2. **Minimization:** The contracts do not accept account or routing numbers, payment credentials, payment-app handles, raw merchant descriptions, names, addresses, or free-form transaction notes. Source aliases and transaction IDs are schema-bounded and synthetic. A future adapter must replace provider identifiers and descriptions locally before this boundary.
 3. **Trust boundary:** Current monitoring data remains inside the local Node.js process and synthetic test fixtures. It does not enter the browser, Strands, Bedrock, AWS storage, an external API, or evaluation reports.
-4. **Consent and control:** No external transmission or persistence occurs in this slice. Every inferred expectation or match carries a confirmation flag, and inferred income is excluded from the conservative forecast until the user confirms it.
+4. **Consent and control:** No external transmission or persistence occurs in this slice. Automatic inference requires three distinct observation dates. Every inferred expectation carries a confirmation flag, and inferred income is excluded from the conservative forecast. The user can confirm the displayed pattern, supply a complete corrected expectation, or reject it; each applied decision remains explicit in the result.
 5. **Retention:** Inputs and results live only for the function call and have no module-owned storage. A future scheduler or adapter needs a separate encrypted retention, correction, export, revocation, and deletion design.
-6. **Abuse and failure modes:** Schemas reject unknown income references, duplicate IDs, future-dated observations, invalid horizons, malformed dates, non-integer money, and impossible expected ranges. Same-day bills are evaluated before income because deposit timing is unknown. False matches and stale expectations remain explicit risks and require correction controls before ingestion is added.
-7. **Verification:** Synthetic tests cover partial hourly pay before and after grace, missing freelance income, multiple independent sources, conservative exclusion of inferred income, protected-obligation risk, and same-day timing. Strands trajectory, model-output, prompt-injection, persistence, and adapter tests remain required when those boundaries are introduced.
+6. **Abuse and failure modes:** Schemas reject histories over 180 days, out-of-window records, unknown override sources, duplicate IDs or overrides, future-dated observations, invalid horizons or dates, non-integer money, and impossible expected ranges. Reimbursements, transfers, unknown credits, and debits cannot create income patterns. Sparse history is not inferred; irregular history requires a complete correction rather than confirmation. Same-day bills are evaluated before income because deposit timing is unknown. False preclassification, source-alias collisions, and stale patterns remain risks requiring adapter and correction controls.
+7. **Verification:** Synthetic tests cover variable weekly income, biweekly and multiple sources, semimonthly anchors, month-end cadence, split deposits, sparse and irregular history, excluded transaction classes, provenance, confirmation, complete correction, rejection, fixed error codes, bounded-input failures, overdue inferred income, partial pay, protected-obligation risk, and same-day timing. Strands trajectory, model-output, persistence, and adapter tests remain required when those boundaries are introduced.
 
 Current safety limitations:
 
 - The first-cut scanner is deterministic and intentionally limited to high-confidence patterns. It does not reliably identify names, postal addresses, customer IDs, contextual identifiers, every international format, sensitive images, or secrets with unusual formatting.
 - Existing browser data is not automatically erased when private mode is enabled; the user-facing deletion control removes it. Browser local storage and opt-in Strands file sessions are not appropriate persistence for real financial data.
 - The prototype has no user authentication, tenant isolation, encrypted application storage, consent ledger, or export workflow.
+- Recurring-income inference begins after a transaction has been assigned an opaque source alias and fixed classification. The current prototype does not safely normalize or classify raw provider transaction descriptions, and a mistaken upstream classification can still produce a false candidate pattern.
 - Relevant plan and policy content, after the first-cut redaction boundary, is sent to the configured Bedrock model when the agent evaluates it.
 - Pasted text is supported, but secure file/PDF ingestion and page-level citations are not yet implemented.
 - Contract v12 passed 11/12 repeated full-campaign trajectories, and the exact remaining schema failure passed 3/3 after the contract-v13 repair. Contract v13 has not yet been rerun three times across all four scenarios, so production reliability is not established.

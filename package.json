@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A local-first paycheck planning companion.",
+  "description": "A Strands early-warning and resolution agent for variable income disruptions.",
   "scripts": {
     "dev": "concurrently -k -n agent,web -c green,cyan \"npm:dev:agent\" \"npm:dev:web\"",
     "dev:web": "vite --host 127.0.0.1",
