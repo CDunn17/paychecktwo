@@ -1,0 +1,139 @@
+{
+  "generatedAt": "2026-08-18T23:59:51.083Z",
+  "baseUrl": "http://127.0.0.1:8791",
+  "model": "global.anthropic.claude-sonnet-4-6",
+  "contractVersion": 12,
+  "trialsPerScenario": 1,
+  "semanticJudgeEnabled": false,
+  "semanticJudgeModel": null,
+  "semanticRubricVersion": null,
+  "passed": false,
+  "scenariosPassingAllTrials": 0,
+  "scenariosTotal": 1,
+  "runsPassed": 0,
+  "runsTotal": 1,
+  "passRatePercent": 0,
+  "overallLatencySeconds": {
+    "count": 1,
+    "min": 0.03,
+    "median": 0.03,
+    "max": 0.03,
+    "mean": 0.03,
+    "standardDeviation": 0
+  },
+  "priceBasis": {
+    "inputUsdPerMillionTokens": 3,
+    "outputUsdPerMillionTokens": 15,
+    "note": "Estimate from reported input/output tokens only; excludes cache token classes, taxes, credits, and other AWS charges."
+  },
+  "totalCost": {
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "totalTokens": 0,
+    "estimatedUsd": 0
+  },
+  "semanticJudgeCost": null,
+  "combinedEstimatedCostUsd": 0,
+  "semanticSummary": null,
+  "scenarioSummaries": [
+    {
+      "id": "baseline-affordability",
+      "runs": 1,
+      "passedRuns": 0,
+      "passRatePercent": 0,
+      "latencySeconds": {
+        "count": 1,
+        "min": 0.03,
+        "median": 0.03,
+        "max": 0.03,
+        "mean": 0.03,
+        "standardDeviation": 0
+      },
+      "cycles": null,
+      "toolCalls": {
+        "count": 1,
+        "min": 0,
+        "median": 0,
+        "max": 0,
+        "mean": 0,
+        "standardDeviation": 0
+      },
+      "tokens": null,
+      "structuredOutputFirstTryRatePercent": 0,
+      "cost": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "estimatedUsd": 0
+      },
+      "semantic": null
+    }
+  ],
+  "results": [
+    {
+      "id": "baseline-affordability",
+      "trial": 1,
+      "passed": false,
+      "riskLevel": null,
+      "safeToSpend": null,
+      "durationMs": 28,
+      "cycles": null,
+      "tokens": null,
+      "toolCalls": 0,
+      "toolStages": [],
+      "modelStages": [
+        {
+          "agentRole": "orchestrator",
+          "call": 1,
+          "durationMs": null,
+          "completed": false,
+          "projectedInputTokens": 6581,
+          "usage": null,
+          "stopReason": null,
+          "failureCategory": null
+        }
+      ],
+      "verifierAttempts": [],
+      "nonToolDurationMs": 28,
+      "structuredOutputAttempts": null,
+      "successfulTools": [],
+      "missingTools": [
+        "get_financial_snapshot",
+        "analyze_paycheck_scenario",
+        "verify_financial_plan"
+      ],
+      "failedTools": [],
+      "approvalViolations": [],
+      "automaticChecks": null,
+      "semanticEvaluation": null,
+      "semanticMetrics": null,
+      "humanReviewCriteria": [
+        "Uses the calculated safe-to-spend amount",
+        "Answers the purchase question directly",
+        "Does not present planning guidance as financial advice"
+      ],
+      "failureReason": "agent_incomplete",
+      "incompleteDiagnostics": {
+        "cycles": null,
+        "tokens": null,
+        "completedTools": [],
+        "failedTools": [],
+        "toolStages": [],
+        "modelStages": [
+          {
+            "agentRole": "orchestrator",
+            "call": 1,
+            "durationMs": null,
+            "completed": false,
+            "projectedInputTokens": 6581,
+            "usage": null,
+            "stopReason": null,
+            "failureCategory": null
+          }
+        ],
+        "verifierAttempts": [],
+        "stopReason": "wallClockDeadline"
+      }
+    }
+  ]
+}

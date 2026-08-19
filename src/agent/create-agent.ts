@@ -3,16 +3,29 @@ import {
   AfterToolsEvent,
   AfterToolCallEvent,
   BeforeToolCallEvent,
+  InvokeModelStage,
   SessionManager,
+  MaxTokensError,
+  ModelError,
+  ModelThrottledError,
   tool
 } from "@strands-agents/sdk";
 import { LocalFileStorage } from "@strands-agents/sdk/storage";
 import { z } from "zod";
 import { createBedrockModel } from "./model.js";
+import { remainingStageBudgetMs } from "./execution-budget.js";
+import type { CashflowAnalysis } from "./calculations.js";
 import { canonicalizePolicyReview } from "./policy-review.js";
 import { createFinancialTools } from "./tools.js";
 import { ORCHESTRATOR_PROMPT, POLICY_REVIEWER_PROMPT, VERIFIER_PROMPT } from "./prompts.js";
-import { AgentRecommendationSchema, PolicyReviewSchema, type PolicyReview } from "./schemas.js";
+import {
+  AgentRecommendationSchema,
+  PolicyReviewSchema,
+  VerifierModelResultSchema,
+  type PolicyReview,
+  type VerifierResult
+} from "./schemas.js";
+import { canonicalizeVerifierResult, createVerifierToolResponse } from "./verifier-policy.js";
 import type { PlanStore } from "./plan-store.js";
 
 export interface AgentTraceEntry {
@@ -22,30 +35,79 @@ export interface AgentTraceEntry {
   status?: "success" | "error";
   durationMs?: number;
   failed?: boolean;
+  failureCategory?: "schema_validation" | "tool_execution";
+  validationIssuePaths?: string[];
+  validationIssueCodes?: string[];
+}
+
+export interface AgentModelStage {
+  agentRole: "orchestrator" | "verifier" | "policy-reviewer";
+  call: number;
+  durationMs: number | null;
+  completed: boolean;
+  projectedInputTokens: number | null;
+  usage: { inputTokens: number; outputTokens: number; totalTokens: number } | null;
+  stopReason: string | null;
+  failureCategory: "throttled" | "max_tokens" | "cancelled" | "model_error" | "unknown" | null;
+}
+
+export interface VerifierAttemptSummary {
+  attempt: number;
+  verdict: VerifierResult["verdict"];
+  failedChecks: Array<VerifierResult["corrections"][number]["code"]>;
 }
 
 export interface AgentRuntime {
   agent: Agent;
   trace: AgentTraceEntry[];
+  modelStages: AgentModelStage[];
+  verifierAttempts: VerifierAttemptSummary[];
   getCapturedStructuredOutput: () => unknown | undefined;
   getPolicyReview: () => PolicyReview | undefined;
+  getVerifierResult: () => VerifierResult | undefined;
+  getPrimaryAnalysis: () => CashflowAnalysis | undefined;
+}
+
+interface PaycheckAgentOptions {
+  ephemeral: boolean;
+  deadlineAtMs: number;
+  finalizationReserveMs: number;
+}
+
+function positiveNumberFromEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive number.`);
+  return value;
+}
+
+function positiveIntegerFromEnv(name: string, fallback: number): number {
+  const value = positiveNumberFromEnv(name, fallback);
+  if (!Number.isInteger(value)) throw new Error(`${name} must be a positive integer.`);
+  return value;
 }
 
 export function createPaycheckAgent(
   planStore: PlanStore,
   sessionId: string,
-  options: { ephemeral: boolean } = { ephemeral: true }
+  options: PaycheckAgentOptions
 ): AgentRuntime {
   const model = createBedrockModel();
+  const verifierModelMaxTokens = positiveNumberFromEnv("STRANDS_VERIFIER_MODEL_MAX_TOKENS", 1_000);
+  const verifierModel = createBedrockModel({ maxTokens: verifierModelMaxTokens, temperature: 0 });
 
   const verifier = new Agent({
     id: "plan-verifier",
     name: "Paycheck Plan Verifier",
     description: "Checks a proposed paycheck plan for arithmetic grounding, protected essentials, unsupported assumptions, and unsafe recommendations.",
-    model,
+    model: verifierModel,
     systemPrompt: VERIFIER_PROMPT,
+    structuredOutputSchema: VerifierModelResultSchema,
     printer: false
   });
+  let latestVerifierResult: VerifierResult | undefined;
+  const verifierAttempts: VerifierAttemptSummary[] = [];
+  let verifierInvocationCount = 0;
+  let latestPrimaryAnalysis: CashflowAnalysis | undefined;
 
   const policyReviewer = new Agent({
     id: "policy-reviewer",
@@ -72,18 +134,40 @@ export function createPaycheckAgent(
 
   const verifyFinancialPlan = tool({
     name: "verify_financial_plan",
-    description: "Independently check the proposed recommendation and its tool evidence before answering the user.",
-    inputSchema: z.object({ input: z.string().min(1) }),
+    description: "Independently critique a compact proposed recommendation and its relevant tool evidence exactly once. Apply any returned fixed corrections directly to the final output; do not call this tool again.",
+    inputSchema: z.object({ input: z.string().min(1).max(8_000) }),
     callback: async ({ input }, context) => {
       if (!context) throw new Error("Plan verifier requires an agent tool context.");
-      const verifierTimeout = AbortSignal.timeout(Number(process.env.STRANDS_VERIFIER_TIMEOUT_MS ?? 45_000));
+      const verifierAttemptLimit = positiveIntegerFromEnv("STRANDS_VERIFIER_ATTEMPT_LIMIT", 1);
+      if (verifierInvocationCount >= verifierAttemptLimit) {
+        if (latestVerifierResult !== undefined) return createVerifierToolResponse(latestVerifierResult);
+        throw new Error("Independent verification retry budget exhausted.");
+      }
+      verifierInvocationCount += 1;
+      const verifierBudgetMs = remainingStageBudgetMs({
+        nowMs: performance.now(),
+        deadlineAtMs: options.deadlineAtMs,
+        reserveMs: options.finalizationReserveMs,
+        stageCapMs: positiveNumberFromEnv("STRANDS_VERIFIER_TIMEOUT_MS", 45_000)
+      });
+      if (verifierBudgetMs === 0) {
+        throw new Error("Insufficient execution time remains for required independent verification.");
+      }
+      const verifierTimeout = AbortSignal.timeout(verifierBudgetMs);
+      verifier.messages = [];
       const result = await verifier.invoke(input, {
         cancelSignal: AbortSignal.any([context.agent.cancelSignal, verifierTimeout]),
         invocationState: context.invocationState,
-        limits: { turns: 1, outputTokens: 2_000, totalTokens: 25_000 }
+        limits: { turns: 1, outputTokens: verifierModelMaxTokens, totalTokens: 15_000 }
       });
       if (result.stopReason === "cancelled") throw new Error("Plan verification timed out.");
-      return result.toString();
+      latestVerifierResult = canonicalizeVerifierResult(result.structuredOutput);
+      verifierAttempts.push({
+        attempt: verifierInvocationCount,
+        verdict: latestVerifierResult.verdict,
+        failedChecks: latestVerifierResult.corrections.map(({ code }) => code)
+      });
+      return createVerifierToolResponse(latestVerifierResult);
     }
   });
 
@@ -122,14 +206,17 @@ export function createPaycheckAgent(
     model,
     systemPrompt: ORCHESTRATOR_PROMPT,
     tools: [
-      ...createFinancialTools(planStore),
+      ...createFinancialTools(planStore, {
+        onPrimaryAnalysis: (analysis) => {
+          latestPrimaryAnalysis = analysis;
+        }
+      }),
       reviewTermsAndPolicies,
       verifyFinancialPlan
     ],
     structuredOutputSchema: AgentRecommendationSchema,
     ...(sessionManager ? { sessionManager } : {}),
     toolExecutor: "sequential",
-    contextManager: "auto",
     printer: false,
     traceAttributes: {
       "app.name": "paycheck-two",
@@ -138,8 +225,52 @@ export function createPaycheckAgent(
   });
 
   const trace: AgentTraceEntry[] = [];
+  const modelStages: AgentModelStage[] = [];
   let capturedStructuredOutput: unknown | undefined;
   const toolStartedAt = new Map<string, number>();
+
+  const instrumentModelCalls = (
+    instrumentedAgent: Agent,
+    agentRole: AgentModelStage["agentRole"]
+  ): void => {
+    let call = 0;
+    instrumentedAgent.addMiddleware(InvokeModelStage, async function* (context, next) {
+      const startedAt = performance.now();
+      const stage: AgentModelStage = {
+        agentRole,
+        call: call += 1,
+        durationMs: null,
+        completed: false,
+        projectedInputTokens: context.projectedInputTokens ?? null,
+        usage: null,
+        stopReason: null,
+        failureCategory: null
+      };
+      modelStages.push(stage);
+      try {
+        const result = yield* next(context);
+        stage.completed = true;
+        stage.usage = result.result.metadata?.usage ?? null;
+        stage.stopReason = result.result.stopReason;
+        return result;
+      } catch (error) {
+        if (error instanceof ModelThrottledError) stage.failureCategory = "throttled";
+        else if (error instanceof MaxTokensError) stage.failureCategory = "max_tokens";
+        else if (error instanceof ModelError) stage.failureCategory = "model_error";
+        else if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+          stage.failureCategory = "cancelled";
+        } else stage.failureCategory = "unknown";
+        throw error;
+      } finally {
+        stage.durationMs = Math.round(performance.now() - startedAt);
+      }
+    });
+  };
+
+  instrumentModelCalls(agent, "orchestrator");
+  instrumentModelCalls(verifier, "verifier");
+  instrumentModelCalls(policyReviewer, "policy-reviewer");
+
   agent.addHook(BeforeToolCallEvent, (event) => {
     toolStartedAt.set(event.toolUse.toolUseId, performance.now());
     trace.push({ phase: "started", tool: event.toolUse.name, timestamp: new Date().toISOString() });
@@ -147,13 +278,29 @@ export function createPaycheckAgent(
   agent.addHook(AfterToolCallEvent, (event) => {
     const startedAt = toolStartedAt.get(event.toolUse.toolUseId);
     const failed = Boolean(event.error) || event.result.status === "error";
+    const toolError = event.error ?? event.result.error;
+    const validationIssuePaths = failed
+      && event.toolUse.name === "strands_structured_output"
+      && toolError instanceof z.ZodError
+      ? [...new Set(toolError.issues.map((issue) => issue.path.map((part) => typeof part === "number" ? "[]" : part).join(".")))]
+      : undefined;
+    const validationIssueCodes = failed
+      && event.toolUse.name === "strands_structured_output"
+      && toolError instanceof z.ZodError
+      ? [...new Set(toolError.issues.map((issue) => issue.code))]
+      : undefined;
     trace.push({
       phase: "completed",
       tool: event.toolUse.name,
       timestamp: new Date().toISOString(),
       status: failed ? "error" : "success",
       durationMs: startedAt === undefined ? undefined : Math.round(performance.now() - startedAt),
-      failed
+      failed,
+      ...(failed ? {
+        failureCategory: validationIssuePaths ? "schema_validation" : "tool_execution"
+      } : {}),
+      ...(validationIssuePaths ? { validationIssuePaths } : {}),
+      ...(validationIssueCodes ? { validationIssueCodes } : {})
     });
     if (!failed && event.toolUse.name === "strands_structured_output") {
       capturedStructuredOutput = event.toolUse.input;
@@ -169,7 +316,11 @@ export function createPaycheckAgent(
   return {
     agent,
     trace,
+    modelStages,
+    verifierAttempts,
     getCapturedStructuredOutput: () => capturedStructuredOutput,
-    getPolicyReview: () => latestPolicyReview
+    getPolicyReview: () => latestPolicyReview,
+    getVerifierResult: () => latestVerifierResult,
+    getPrimaryAnalysis: () => latestPrimaryAnalysis
   };
 }

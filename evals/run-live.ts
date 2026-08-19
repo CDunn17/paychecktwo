@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import dotenv from "dotenv";
+import { z } from "zod";
 import { analyzeCashflow } from "../src/agent/calculations.js";
 import { actionRequiresApproval } from "../src/agent/recommendation-policy.js";
 import {
@@ -34,6 +35,36 @@ interface TraceEntry {
   tool: string;
   status?: "success" | "error";
   failed?: boolean;
+  durationMs?: number;
+  failureCategory?: "schema_validation" | "tool_execution";
+  validationIssuePaths?: string[];
+  validationIssueCodes?: string[];
+}
+
+interface ToolStage {
+  tool: string;
+  durationMs: number | null;
+  failed: boolean;
+  failureCategory: "schema_validation" | "tool_execution" | null;
+  validationIssuePaths: string[];
+  validationIssueCodes: string[];
+}
+
+interface ModelStage {
+  agentRole: "orchestrator" | "verifier" | "policy-reviewer";
+  call: number;
+  durationMs: number | null;
+  completed: boolean;
+  projectedInputTokens: number | null;
+  usage: { inputTokens: number; outputTokens: number; totalTokens: number } | null;
+  stopReason: string | null;
+  failureCategory: "throttled" | "max_tokens" | "cancelled" | "model_error" | "unknown" | null;
+}
+
+interface VerifierAttempt {
+  attempt: number;
+  verdict: "verified" | "corrections_required";
+  failedChecks: string[];
 }
 
 interface AgentResponse {
@@ -46,6 +77,8 @@ interface AgentResponse {
     structuredOutputAttempts: number;
     structuredOutputFailures: number;
     tokens: { inputTokens: number; outputTokens: number; totalTokens: number };
+    modelStages: ModelStage[];
+    verifierAttempts: VerifierAttempt[];
   } | null;
   safety: {
     modelInputSanitized: boolean;
@@ -54,6 +87,67 @@ interface AgentResponse {
     outputScanPassed: boolean;
   };
   stopReason: string;
+}
+
+const AgentIncompleteResponseSchema = z.object({
+  code: z.literal("AGENT_INCOMPLETE"),
+  message: z.string(),
+  stopReason: z.string(),
+  durationMs: z.number().nonnegative(),
+  diagnostics: z.object({
+    cycles: z.number().nonnegative().nullable(),
+    tokens: z.object({
+      inputTokens: z.number().nonnegative(),
+      outputTokens: z.number().nonnegative(),
+      totalTokens: z.number().nonnegative()
+    }).nullable(),
+    completedTools: z.array(z.string()),
+    failedTools: z.array(z.string()),
+    toolStages: z.array(z.object({
+      tool: z.string(),
+      durationMs: z.number().nonnegative().nullable(),
+      failed: z.boolean(),
+      failureCategory: z.enum(["schema_validation", "tool_execution"]).nullable(),
+      validationIssuePaths: z.array(z.string()),
+      validationIssueCodes: z.array(z.string())
+    })),
+    modelStages: z.array(z.object({
+      agentRole: z.enum(["orchestrator", "verifier", "policy-reviewer"]),
+      call: z.number().int().positive(),
+      durationMs: z.number().nonnegative().nullable(),
+      completed: z.boolean(),
+      projectedInputTokens: z.number().nonnegative().nullable(),
+      usage: z.object({
+        inputTokens: z.number().nonnegative(),
+        outputTokens: z.number().nonnegative(),
+        totalTokens: z.number().nonnegative()
+      }).nullable(),
+      stopReason: z.string().nullable(),
+      failureCategory: z.enum(["throttled", "max_tokens", "cancelled", "model_error", "unknown"]).nullable()
+    })),
+    verifierAttempts: z.array(z.object({
+      attempt: z.number().int().positive(),
+      verdict: z.enum(["verified", "corrections_required"]),
+      failedChecks: z.array(z.enum([
+        "arithmetic",
+        "protected_essentials",
+        "assumption",
+        "external_action",
+        "policy_support",
+        "user_autonomy",
+        "harmful_advice"
+      ]))
+    }))
+  })
+});
+
+type AgentIncompleteResponse = z.infer<typeof AgentIncompleteResponseSchema>;
+
+class LiveAgentIncompleteError extends Error {
+  constructor(readonly response: AgentIncompleteResponse) {
+    super("Agent reached an execution budget before validated structured output.");
+    this.name = "LiveAgentIncompleteError";
+  }
 }
 
 interface LiveResult {
@@ -66,6 +160,10 @@ interface LiveResult {
   cycles: number | null;
   tokens: { inputTokens: number; outputTokens: number; totalTokens: number } | null;
   toolCalls: number;
+  toolStages: ToolStage[];
+  modelStages: ModelStage[];
+  verifierAttempts: VerifierAttempt[];
+  nonToolDurationMs: number | null;
   structuredOutputAttempts: number | null;
   successfulTools: string[];
   missingTools: string[];
@@ -76,7 +174,8 @@ interface LiveResult {
   semanticMetrics: SemanticJudgeResult["metrics"];
   semanticFailureReason?: SemanticJudgeFailureCode;
   humanReviewCriteria: string[];
-  failureReason?: "timeout" | "request_or_validation_error";
+  failureReason?: "timeout" | "agent_incomplete" | "request_or_validation_error";
+  incompleteDiagnostics?: AgentIncompleteResponse["diagnostics"] & { stopReason: string };
 }
 
 interface SummaryStats {
@@ -190,15 +289,28 @@ for (const fixture of fixtures) {
   });
   const responseBody = await response.json() as AgentResponse | { message?: string; code?: string };
   if (!response.ok || !("recommendation" in responseBody)) {
+    const incompleteResponse = AgentIncompleteResponseSchema.safeParse(responseBody);
+    if (incompleteResponse.success) throw new LiveAgentIncompleteError(incompleteResponse.data);
     throw new Error(`${fixture.id}: HTTP ${response.status} ${JSON.stringify(responseBody)}`);
   }
 
   const recommendation = RecommendationSchema.parse(responseBody.recommendation);
   const expectedAnalysis = analyzeCashflow(plan, "2026-08-17", DisruptionSchema.parse(fixture.disruption));
   const completedTrace = responseBody.trace.filter((entry) => entry.phase === "completed");
+  const toolStages: ToolStage[] = completedTrace.map((entry) => ({
+    tool: entry.tool,
+    durationMs: entry.durationMs ?? null,
+    failed: entry.failed === true || entry.status === "error",
+    failureCategory: entry.failureCategory ?? null,
+    validationIssuePaths: [...(entry.validationIssuePaths ?? [])],
+    validationIssueCodes: [...(entry.validationIssueCodes ?? [])]
+  }));
   const successfulTools = new Set(
     completedTrace.filter((entry) => !entry.failed && entry.status !== "error").map((entry) => entry.tool)
   );
+  const primaryAnalysisCalls = completedTrace.filter(
+    (entry) => entry.tool === "analyze_paycheck_scenario" && !entry.failed && entry.status !== "error"
+  ).length;
   const missingTools = fixture.expectedTools.filter((tool) => !successfulTools.has(tool));
   const failedTools = completedTrace.filter((entry) => entry.failed || entry.status === "error").map((entry) => entry.tool);
   const approvalViolations = recommendation.recommendedActions
@@ -216,9 +328,11 @@ for (const fixture of fixtures) {
   const automaticChecks = {
     httpSuccess: response.ok,
     expectedToolsUsed: missingTools.length === 0,
+    exactlyOnePrimaryAnalysis: primaryAnalysisCalls === 1,
     noToolFailures: failedTools.length === 0,
     structuredOutputFirstTry: responseBody.metrics?.structuredOutputAttempts === 1
       && responseBody.metrics.structuredOutputFailures === 0,
+    exactlyOneVerifierCritique: responseBody.metrics?.verifierAttempts.length === 1,
     verifierApplied: recommendation.verification.checked && recommendation.verification.notes.length > 0,
     scenarioNumbersGrounded: recommendation.riskLevel === expectedAnalysis.riskLevel
       && recommendation.safeToSpend === expectedAnalysis.safeToSpend
@@ -267,6 +381,14 @@ for (const fixture of fixtures) {
     cycles: responseBody.metrics?.cycles ?? null,
     tokens: responseBody.metrics?.tokens ?? null,
     toolCalls: responseBody.metrics?.toolCalls ?? completedTrace.length,
+    toolStages,
+    modelStages: responseBody.metrics?.modelStages ?? [],
+    verifierAttempts: responseBody.metrics?.verifierAttempts ?? [],
+    nonToolDurationMs: Math.max(
+      0,
+      (responseBody.metrics?.wallClockMs ?? Math.round(performance.now() - startedAt))
+        - toolStages.reduce((total, stage) => total + (stage.durationMs ?? 0), 0)
+    ),
     structuredOutputAttempts: responseBody.metrics?.structuredOutputAttempts ?? null,
     successfulTools: [...successfulTools],
     missingTools,
@@ -290,26 +412,43 @@ for (const fixture of fixtures) {
   }
     } catch (error) {
       const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+      const incomplete = error instanceof LiveAgentIncompleteError ? error.response : null;
+      const completedTools = incomplete?.diagnostics.completedTools ?? [];
+      const failedTools = incomplete?.diagnostics.failedTools ?? [];
+      const incompleteToolStages = incomplete?.diagnostics.toolStages ?? [];
+      const failedDurationMs = incomplete?.durationMs ?? 135_000;
       const failedResult: LiveResult = {
         id: fixture.id,
         trial,
         passed: false,
         riskLevel: null,
         safeToSpend: null,
-        durationMs: 135_000,
-        cycles: null,
-        tokens: null,
-        toolCalls: 0,
+        durationMs: failedDurationMs,
+        cycles: incomplete?.diagnostics.cycles ?? null,
+        tokens: incomplete?.diagnostics.tokens ?? null,
+        toolCalls: incomplete?.diagnostics.toolStages.length ?? 0,
+        toolStages: incompleteToolStages,
+        modelStages: incomplete?.diagnostics.modelStages ?? [],
+        verifierAttempts: incomplete?.diagnostics.verifierAttempts ?? [],
+        nonToolDurationMs: incomplete
+          ? Math.max(0, failedDurationMs - incompleteToolStages.reduce((total, stage) => total + (stage.durationMs ?? 0), 0))
+          : null,
         structuredOutputAttempts: null,
-        successfulTools: [],
-        missingTools: fixture.expectedTools,
-        failedTools: [],
+        successfulTools: completedTools.filter((tool) => !failedTools.includes(tool)),
+        missingTools: fixture.expectedTools.filter((tool) => !completedTools.includes(tool)),
+        failedTools,
         approvalViolations: [],
         automaticChecks: null,
         semanticEvaluation: null,
         semanticMetrics: null,
         humanReviewCriteria: fixture.successCriteria,
-        failureReason: timedOut ? "timeout" : "request_or_validation_error"
+        failureReason: timedOut ? "timeout" : incomplete ? "agent_incomplete" : "request_or_validation_error",
+        ...(incomplete ? {
+          incompleteDiagnostics: {
+            ...incomplete.diagnostics,
+            stopReason: incomplete.stopReason
+          }
+        } : {})
       };
       results.push(failedResult);
       console.log(
@@ -379,6 +518,7 @@ const summarizeSemanticEvaluations = (selectedResults: LiveResult[]) => {
       return [name, values.length === 0 ? null : rounded(values.reduce((total, value) => total + value, 0) / values.length, 2)];
     })),
     styleFlags: [...new Set(evaluations.flatMap(({ evaluation }) => evaluation.styleFlags))],
+    styleMechanisms: [...new Set(evaluations.flatMap(({ evaluation }) => evaluation.styleMechanisms))],
     safetyFlags: [...new Set(evaluations.flatMap(({ evaluation }) => evaluation.safetyFlags))],
     failedCriteria: [...new Set(evaluations.flatMap(({ evaluation }) => evaluation.failedCriteria))],
     judgeCost: estimateSemanticJudgeCost(selectedResults)

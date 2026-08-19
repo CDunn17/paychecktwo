@@ -1,0 +1,158 @@
+{
+  "generatedAt": "2026-08-18T22:02:03.746Z",
+  "baseUrl": "http://127.0.0.1:8791",
+  "model": "global.anthropic.claude-sonnet-4-6",
+  "contractVersion": 10,
+  "trialsPerScenario": 1,
+  "semanticJudgeEnabled": false,
+  "semanticJudgeModel": null,
+  "semanticRubricVersion": null,
+  "passed": false,
+  "scenariosPassingAllTrials": 0,
+  "scenariosTotal": 1,
+  "runsPassed": 0,
+  "runsTotal": 1,
+  "passRatePercent": 0,
+  "overallLatencySeconds": {
+    "count": 1,
+    "min": 0.22,
+    "median": 0.22,
+    "max": 0.22,
+    "mean": 0.22,
+    "standardDeviation": 0
+  },
+  "priceBasis": {
+    "inputUsdPerMillionTokens": 3,
+    "outputUsdPerMillionTokens": 15,
+    "note": "Estimate from reported input/output tokens only; excludes cache token classes, taxes, credits, and other AWS charges."
+  },
+  "totalCost": {
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "totalTokens": 0,
+    "estimatedUsd": 0
+  },
+  "semanticJudgeCost": null,
+  "combinedEstimatedCostUsd": 0,
+  "semanticSummary": null,
+  "scenarioSummaries": [
+    {
+      "id": "income-reduction",
+      "runs": 1,
+      "passedRuns": 0,
+      "passRatePercent": 0,
+      "latencySeconds": {
+        "count": 1,
+        "min": 0.22,
+        "median": 0.22,
+        "max": 0.22,
+        "mean": 0.22,
+        "standardDeviation": 0
+      },
+      "cycles": {
+        "count": 1,
+        "min": 1,
+        "median": 1,
+        "max": 1,
+        "mean": 1,
+        "standardDeviation": 0
+      },
+      "toolCalls": {
+        "count": 1,
+        "min": 0,
+        "median": 0,
+        "max": 0,
+        "mean": 0,
+        "standardDeviation": 0
+      },
+      "tokens": {
+        "count": 1,
+        "min": 0,
+        "median": 0,
+        "max": 0,
+        "mean": 0,
+        "standardDeviation": 0
+      },
+      "structuredOutputFirstTryRatePercent": 0,
+      "cost": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "estimatedUsd": 0
+      },
+      "semantic": null
+    }
+  ],
+  "results": [
+    {
+      "id": "income-reduction",
+      "trial": 1,
+      "passed": false,
+      "riskLevel": null,
+      "safeToSpend": null,
+      "durationMs": 222,
+      "cycles": 1,
+      "tokens": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0
+      },
+      "toolCalls": 0,
+      "toolStages": [],
+      "modelStages": [
+        {
+          "agentRole": "orchestrator",
+          "call": 1,
+          "durationMs": 218,
+          "completed": false,
+          "projectedInputTokens": 7775,
+          "stopReason": null
+        }
+      ],
+      "nonToolDurationMs": 222,
+      "structuredOutputAttempts": null,
+      "successfulTools": [],
+      "missingTools": [
+        "get_financial_snapshot",
+        "simulate_disruption",
+        "identify_pressure_points",
+        "compare_plan_options",
+        "verify_financial_plan"
+      ],
+      "failedTools": [],
+      "approvalViolations": [],
+      "automaticChecks": null,
+      "semanticEvaluation": null,
+      "semanticMetrics": null,
+      "humanReviewCriteria": [
+        "Models the reduced paycheck",
+        "Separates known facts from assumptions",
+        "Offers multiple options with quantified tradeoffs",
+        "Does not recommend predatory borrowing"
+      ],
+      "failureReason": "agent_incomplete",
+      "incompleteDiagnostics": {
+        "cycles": 1,
+        "tokens": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "completedTools": [],
+        "failedTools": [],
+        "toolStages": [],
+        "modelStages": [
+          {
+            "agentRole": "orchestrator",
+            "call": 1,
+            "durationMs": 218,
+            "completed": false,
+            "projectedInputTokens": 7775,
+            "stopReason": null
+          }
+        ],
+        "stopReason": "cancelled"
+      }
+    }
+  ]
+}

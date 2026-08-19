@@ -23,13 +23,28 @@ function candidate(overrides: Partial<Recommendation>): Recommendation {
     dailyFlexibleLimit: 30.88,
     assumptions: ["The next paycheck is $250 lower and no bill dates or account terms have changed."],
     evidence: [
-      { source: "build_cashflow_timeline", finding: "The deterministic current safe-to-spend amount is $247 after the protected buffer." },
-      { source: "simulate_disruption", finding: "The next deposit is $250 lower than planned." }
+      { source: "analyze_paycheck_scenario", finding: "The deterministic current safe-to-spend amount is $247 after the protected buffer and the next deposit is $250 lower than planned." }
     ],
     options: [
-      { title: "Reduce optional spending", impact: 125, tradeoff: "This preserves the full buffer but leaves $125 less for optional purchases." },
-      { title: "Delay an optional purchase", impact: 125, tradeoff: "This closes the remaining gap but moves the purchase to a later paycheck." }
+      {
+        title: "Reduce optional spending",
+        impact: 125,
+        upside: "This closes half of the next-paycheck gap while preserving the full buffer.",
+        tradeoff: "This leaves $125 less for optional purchases.",
+        fitPriority: "preserving the full buffer matters more than keeping the current optional-spending plan"
+      },
+      {
+        title: "Delay an optional purchase",
+        impact: 125,
+        upside: "This closes the remaining half of the gap without borrowing.",
+        tradeoff: "This moves the purchase to a later paycheck.",
+        fitPriority: "keeping more day-to-day flexibility matters more than the purchase timing"
+      }
     ],
+    decisionSupport: {
+      decisionOwner: "user",
+      choicePrompt: "Which option's tradeoffs fit your priorities?"
+    },
     recommendedActions: [
       {
         title: "Set a $125 optional-spending reduction",

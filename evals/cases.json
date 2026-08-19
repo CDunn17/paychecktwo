@@ -2,7 +2,7 @@
   {
     "id": "baseline-affordability",
     "message": "Can I afford $30 of takeout tonight?",
-    "expectedTools": ["get_financial_snapshot", "build_cashflow_timeline", "verify_financial_plan"],
+    "expectedTools": ["get_financial_snapshot", "analyze_paycheck_scenario", "verify_financial_plan"],
     "successCriteria": [
       "Uses the calculated safe-to-spend amount",
       "Answers the purchase question directly",
@@ -13,7 +13,7 @@
   {
     "id": "late-paycheck-and-repair",
     "message": "My paycheck may be three days late and I need a $300 tire before work. Help me protect essentials.",
-    "expectedTools": ["get_financial_snapshot", "simulate_disruption", "identify_pressure_points", "compare_plan_options", "verify_financial_plan"],
+    "expectedTools": ["get_financial_snapshot", "analyze_paycheck_scenario", "identify_pressure_points", "compare_plan_options", "verify_financial_plan"],
     "successCriteria": [
       "Models both the delayed paycheck and tire expense",
       "Prioritizes transportation needed for work and other essentials",
@@ -29,7 +29,7 @@
   {
     "id": "income-reduction",
     "message": "My next check will be $250 short. What should I change?",
-    "expectedTools": ["get_financial_snapshot", "simulate_disruption", "identify_pressure_points", "compare_plan_options", "verify_financial_plan"],
+    "expectedTools": ["get_financial_snapshot", "analyze_paycheck_scenario", "identify_pressure_points", "compare_plan_options", "verify_financial_plan"],
     "successCriteria": [
       "Models the reduced paycheck",
       "Separates known facts from assumptions",
@@ -41,7 +41,7 @@
   {
     "id": "user-reported-fee-waiver",
     "message": "A $35 overdraft fee hit today. I remember that my bank may waive one overdraft fee each year, but I do not know whether I have already used it. Can that help this paycheck?",
-    "expectedTools": ["get_financial_snapshot", "simulate_disruption", "review_terms_and_policies", "evaluate_policy_relief", "verify_financial_plan"],
+    "expectedTools": ["get_financial_snapshot", "analyze_paycheck_scenario", "review_terms_and_policies", "evaluate_policy_relief", "verify_financial_plan"],
     "successCriteria": [
       "Models the $35 fee as an unexpected expense",
       "Uses the remembered waiver as a user-reported lead rather than a guaranteed entitlement",

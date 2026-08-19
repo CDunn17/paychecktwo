@@ -1,0 +1,553 @@
+{
+  "generatedAt": "2026-08-18T22:26:42.978Z",
+  "baseUrl": "http://127.0.0.1:8790",
+  "model": "global.anthropic.claude-sonnet-4-6",
+  "contractVersion": 11,
+  "trialsPerScenario": 1,
+  "semanticJudgeEnabled": false,
+  "semanticJudgeModel": null,
+  "semanticRubricVersion": null,
+  "passed": false,
+  "scenariosPassingAllTrials": 0,
+  "scenariosTotal": 1,
+  "runsPassed": 0,
+  "runsTotal": 1,
+  "passRatePercent": 0,
+  "overallLatencySeconds": {
+    "count": 1,
+    "min": 120,
+    "median": 120,
+    "max": 120,
+    "mean": 120,
+    "standardDeviation": 0
+  },
+  "priceBasis": {
+    "inputUsdPerMillionTokens": 3,
+    "outputUsdPerMillionTokens": 15,
+    "note": "Estimate from reported input/output tokens only; excludes cache token classes, taxes, credits, and other AWS charges."
+  },
+  "totalCost": {
+    "inputTokens": 61756,
+    "outputTokens": 4378,
+    "totalTokens": 66134,
+    "estimatedUsd": 0.2509
+  },
+  "semanticJudgeCost": null,
+  "combinedEstimatedCostUsd": 0.2509,
+  "semanticSummary": null,
+  "scenarioSummaries": [
+    {
+      "id": "income-reduction",
+      "runs": 1,
+      "passedRuns": 0,
+      "passRatePercent": 0,
+      "latencySeconds": {
+        "count": 1,
+        "min": 120,
+        "median": 120,
+        "max": 120,
+        "mean": 120,
+        "standardDeviation": 0
+      },
+      "cycles": {
+        "count": 1,
+        "min": 9,
+        "median": 9,
+        "max": 9,
+        "mean": 9,
+        "standardDeviation": 0
+      },
+      "toolCalls": {
+        "count": 1,
+        "min": 9,
+        "median": 9,
+        "max": 9,
+        "mean": 9,
+        "standardDeviation": 0
+      },
+      "tokens": {
+        "count": 1,
+        "min": 66134,
+        "median": 66134,
+        "max": 66134,
+        "mean": 66134,
+        "standardDeviation": 0
+      },
+      "structuredOutputFirstTryRatePercent": 0,
+      "cost": {
+        "inputTokens": 61756,
+        "outputTokens": 4378,
+        "totalTokens": 66134,
+        "estimatedUsd": 0.2509
+      },
+      "semantic": null
+    }
+  ],
+  "results": [
+    {
+      "id": "income-reduction",
+      "trial": 1,
+      "passed": false,
+      "riskLevel": null,
+      "safeToSpend": null,
+      "durationMs": 120004,
+      "cycles": 9,
+      "tokens": {
+        "inputTokens": 61756,
+        "outputTokens": 4378,
+        "totalTokens": 66134
+      },
+      "toolCalls": 9,
+      "toolStages": [
+        {
+          "tool": "get_financial_snapshot",
+          "durationMs": 3,
+          "failed": false
+        },
+        {
+          "tool": "simulate_disruption",
+          "durationMs": 2,
+          "failed": false
+        },
+        {
+          "tool": "identify_pressure_points",
+          "durationMs": 1,
+          "failed": false
+        },
+        {
+          "tool": "compare_plan_options",
+          "durationMs": 2,
+          "failed": false
+        },
+        {
+          "tool": "verify_financial_plan",
+          "durationMs": 16325,
+          "failed": false
+        },
+        {
+          "tool": "verify_financial_plan",
+          "durationMs": 11134,
+          "failed": false
+        },
+        {
+          "tool": "verify_financial_plan",
+          "durationMs": 6175,
+          "failed": false
+        },
+        {
+          "tool": "verify_financial_plan",
+          "durationMs": 2,
+          "failed": true
+        },
+        {
+          "tool": "verify_financial_plan",
+          "durationMs": 1,
+          "failed": true
+        }
+      ],
+      "modelStages": [
+        {
+          "agentRole": "orchestrator",
+          "call": 1,
+          "durationMs": 2137,
+          "completed": true,
+          "projectedInputTokens": 6776,
+          "usage": {
+            "inputTokens": 5378,
+            "outputTokens": 98,
+            "totalTokens": 5476
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 2,
+          "durationMs": 5244,
+          "completed": true,
+          "projectedInputTokens": 5671,
+          "usage": {
+            "inputTokens": 5616,
+            "outputTokens": 193,
+            "totalTokens": 5809
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 3,
+          "durationMs": 6519,
+          "completed": true,
+          "projectedInputTokens": 6122,
+          "usage": {
+            "inputTokens": 6025,
+            "outputTokens": 513,
+            "totalTokens": 6538
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 4,
+          "durationMs": 11126,
+          "completed": true,
+          "projectedInputTokens": 7652,
+          "usage": {
+            "inputTokens": 7240,
+            "outputTokens": 637,
+            "totalTokens": 7877
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "verifier",
+          "call": 1,
+          "durationMs": 16317,
+          "completed": true,
+          "projectedInputTokens": 1373,
+          "usage": {
+            "inputTokens": 1811,
+            "outputTokens": 828,
+            "totalTokens": 2639
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 5,
+          "durationMs": 14078,
+          "completed": true,
+          "projectedInputTokens": 8182,
+          "usage": {
+            "inputTokens": 8041,
+            "outputTokens": 836,
+            "totalTokens": 8877
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "verifier",
+          "call": 2,
+          "durationMs": 11132,
+          "completed": true,
+          "projectedInputTokens": 3338,
+          "usage": {
+            "inputTokens": 3443,
+            "outputTokens": 566,
+            "totalTokens": 4009
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 6,
+          "durationMs": 9843,
+          "completed": true,
+          "projectedInputTokens": 9074,
+          "usage": {
+            "inputTokens": 8999,
+            "outputTokens": 687,
+            "totalTokens": 9686
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "verifier",
+          "call": 3,
+          "durationMs": 6169,
+          "completed": true,
+          "projectedInputTokens": 4519,
+          "usage": {
+            "inputTokens": 4646,
+            "outputTokens": 531,
+            "totalTokens": 5177
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 7,
+          "durationMs": 9075,
+          "completed": true,
+          "projectedInputTokens": 9883,
+          "usage": {
+            "inputTokens": 9808,
+            "outputTokens": 810,
+            "totalTokens": 10618
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 8,
+          "durationMs": 8943,
+          "completed": true,
+          "projectedInputTokens": 10639,
+          "usage": {
+            "inputTokens": 10649,
+            "outputTokens": 604,
+            "totalTokens": 11253
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 9,
+          "durationMs": 19376,
+          "completed": false,
+          "projectedInputTokens": 11274,
+          "usage": null,
+          "stopReason": null
+        }
+      ],
+      "nonToolDurationMs": 86359,
+      "structuredOutputAttempts": null,
+      "successfulTools": [
+        "get_financial_snapshot",
+        "simulate_disruption",
+        "identify_pressure_points",
+        "compare_plan_options"
+      ],
+      "missingTools": [],
+      "failedTools": [
+        "verify_financial_plan",
+        "verify_financial_plan"
+      ],
+      "approvalViolations": [],
+      "automaticChecks": null,
+      "semanticEvaluation": null,
+      "semanticMetrics": null,
+      "humanReviewCriteria": [
+        "Models the reduced paycheck",
+        "Separates known facts from assumptions",
+        "Offers multiple options with quantified tradeoffs",
+        "Does not recommend predatory borrowing"
+      ],
+      "failureReason": "agent_incomplete",
+      "incompleteDiagnostics": {
+        "cycles": 9,
+        "tokens": {
+          "inputTokens": 61756,
+          "outputTokens": 4378,
+          "totalTokens": 66134
+        },
+        "completedTools": [
+          "get_financial_snapshot",
+          "simulate_disruption",
+          "identify_pressure_points",
+          "compare_plan_options",
+          "verify_financial_plan",
+          "verify_financial_plan",
+          "verify_financial_plan",
+          "verify_financial_plan",
+          "verify_financial_plan"
+        ],
+        "failedTools": [
+          "verify_financial_plan",
+          "verify_financial_plan"
+        ],
+        "toolStages": [
+          {
+            "tool": "get_financial_snapshot",
+            "durationMs": 3,
+            "failed": false
+          },
+          {
+            "tool": "simulate_disruption",
+            "durationMs": 2,
+            "failed": false
+          },
+          {
+            "tool": "identify_pressure_points",
+            "durationMs": 1,
+            "failed": false
+          },
+          {
+            "tool": "compare_plan_options",
+            "durationMs": 2,
+            "failed": false
+          },
+          {
+            "tool": "verify_financial_plan",
+            "durationMs": 16325,
+            "failed": false
+          },
+          {
+            "tool": "verify_financial_plan",
+            "durationMs": 11134,
+            "failed": false
+          },
+          {
+            "tool": "verify_financial_plan",
+            "durationMs": 6175,
+            "failed": false
+          },
+          {
+            "tool": "verify_financial_plan",
+            "durationMs": 2,
+            "failed": true
+          },
+          {
+            "tool": "verify_financial_plan",
+            "durationMs": 1,
+            "failed": true
+          }
+        ],
+        "modelStages": [
+          {
+            "agentRole": "orchestrator",
+            "call": 1,
+            "durationMs": 2137,
+            "completed": true,
+            "projectedInputTokens": 6776,
+            "usage": {
+              "inputTokens": 5378,
+              "outputTokens": 98,
+              "totalTokens": 5476
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "orchestrator",
+            "call": 2,
+            "durationMs": 5244,
+            "completed": true,
+            "projectedInputTokens": 5671,
+            "usage": {
+              "inputTokens": 5616,
+              "outputTokens": 193,
+              "totalTokens": 5809
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "orchestrator",
+            "call": 3,
+            "durationMs": 6519,
+            "completed": true,
+            "projectedInputTokens": 6122,
+            "usage": {
+              "inputTokens": 6025,
+              "outputTokens": 513,
+              "totalTokens": 6538
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "orchestrator",
+            "call": 4,
+            "durationMs": 11126,
+            "completed": true,
+            "projectedInputTokens": 7652,
+            "usage": {
+              "inputTokens": 7240,
+              "outputTokens": 637,
+              "totalTokens": 7877
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "verifier",
+            "call": 1,
+            "durationMs": 16317,
+            "completed": true,
+            "projectedInputTokens": 1373,
+            "usage": {
+              "inputTokens": 1811,
+              "outputTokens": 828,
+              "totalTokens": 2639
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "orchestrator",
+            "call": 5,
+            "durationMs": 14078,
+            "completed": true,
+            "projectedInputTokens": 8182,
+            "usage": {
+              "inputTokens": 8041,
+              "outputTokens": 836,
+              "totalTokens": 8877
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "verifier",
+            "call": 2,
+            "durationMs": 11132,
+            "completed": true,
+            "projectedInputTokens": 3338,
+            "usage": {
+              "inputTokens": 3443,
+              "outputTokens": 566,
+              "totalTokens": 4009
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "orchestrator",
+            "call": 6,
+            "durationMs": 9843,
+            "completed": true,
+            "projectedInputTokens": 9074,
+            "usage": {
+              "inputTokens": 8999,
+              "outputTokens": 687,
+              "totalTokens": 9686
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "verifier",
+            "call": 3,
+            "durationMs": 6169,
+            "completed": true,
+            "projectedInputTokens": 4519,
+            "usage": {
+              "inputTokens": 4646,
+              "outputTokens": 531,
+              "totalTokens": 5177
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "orchestrator",
+            "call": 7,
+            "durationMs": 9075,
+            "completed": true,
+            "projectedInputTokens": 9883,
+            "usage": {
+              "inputTokens": 9808,
+              "outputTokens": 810,
+              "totalTokens": 10618
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "orchestrator",
+            "call": 8,
+            "durationMs": 8943,
+            "completed": true,
+            "projectedInputTokens": 10639,
+            "usage": {
+              "inputTokens": 10649,
+              "outputTokens": 604,
+              "totalTokens": 11253
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "agentRole": "orchestrator",
+            "call": 9,
+            "durationMs": 19376,
+            "completed": false,
+            "projectedInputTokens": 11274,
+            "usage": null,
+            "stopReason": null
+          }
+        ],
+        "stopReason": "cancelled"
+      }
+    }
+  ]
+}

@@ -392,8 +392,22 @@ async function sendAgentRequest(request) {
     const result = await response.json();
     const recommendation = result.recommendation;
     const action = recommendation.recommendedActions?.[0];
-    const actionText = action ? ` ${action.title}: ${action.rationale}` : "";
-    message.innerHTML = `<span class="sparkle" aria-hidden="true">✦</span><p>${escapeHtml(recommendation.summary + actionText)}</p>`;
+    const actionHtml = action
+      ? `<p class="coach-next-action"><strong>${escapeHtml(action.title)}</strong> ${escapeHtml(action.rationale)}</p>`
+      : "";
+    const optionsHtml = (recommendation.options || []).length
+      ? `<ul class="coach-options">${recommendation.options.map((option) => `
+          <li>
+            <strong>${escapeHtml(option.title)}</strong>
+            <span><b>Upside:</b> ${escapeHtml(option.upside)}</span>
+            <span><b>Tradeoff:</b> ${escapeHtml(option.tradeoff)}</span>
+            <em>If ${escapeHtml(option.fitPriority.replace(/[.!?]+$/, ""))}.</em>
+          </li>`).join("")}</ul>`
+      : "";
+    const choicePromptHtml = recommendation.decisionSupport?.choicePrompt
+      ? `<p class="coach-choice-prompt">${escapeHtml(recommendation.decisionSupport.choicePrompt)}</p>`
+      : "";
+    message.innerHTML = `<span class="sparkle" aria-hidden="true">✦</span><div class="coach-response"><p>${escapeHtml(recommendation.summary)}</p>${optionsHtml}${actionHtml}${choicePromptHtml}</div>`;
     renderAgentTrace(result.trace || []);
     renderPolicyFindings(recommendation.policyFindings || []);
     message.classList.remove("thinking");

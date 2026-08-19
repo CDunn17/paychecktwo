@@ -1,6 +1,12 @@
 import { tool } from "@strands-agents/sdk";
 import { z } from "zod";
-import { analyzeCashflow, compareOptions, evaluatePolicyRelief as calculatePolicyRelief, findPressurePoints } from "./calculations.js";
+import {
+  analyzeCashflow,
+  compareOptions,
+  evaluatePolicyRelief as calculatePolicyRelief,
+  findPressurePoints,
+  type CashflowAnalysis
+} from "./calculations.js";
 import { ComparisonOptionSchema, DisruptionSchema, IsoDateSchema, PolicyReliefOptionSchema } from "./schemas.js";
 import type { PlanStore } from "./plan-store.js";
 
@@ -8,7 +14,14 @@ const SessionInput = z.object({
   sessionId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/)
 });
 
-export function createFinancialTools(planStore: PlanStore) {
+export interface FinancialToolObserver {
+  onPrimaryAnalysis?: (analysis: CashflowAnalysis) => void;
+}
+
+export function createFinancialTools(
+  planStore: PlanStore,
+  observer: FinancialToolObserver = {}
+) {
   const getFinancialSnapshot = tool({
     name: "get_financial_snapshot",
     description: "Load the authoritative balance, paycheck, buffer, payday, and bills for a Paycheck Two session. Always call this before analysis.",
@@ -16,21 +29,18 @@ export function createFinancialTools(planStore: PlanStore) {
     callback: ({ sessionId }) => planStore.get(sessionId)
   });
 
-  const buildCashflowTimeline = tool({
-    name: "build_cashflow_timeline",
-    description: "Deterministically calculate obligations, safe-to-spend, daily flexible room, and risk through payday for the current plan.",
-    inputSchema: SessionInput.extend({ asOf: IsoDateSchema }),
-    callback: ({ sessionId, asOf }) => analyzeCashflow(planStore.get(sessionId), asOf)
-  });
-
-  const simulateDisruption = tool({
-    name: "simulate_disruption",
-    description: "Run a deterministic what-if scenario involving a delayed or smaller paycheck and unexpected expenses. Use this whenever the user describes a possible disruption.",
+  const analyzePaycheckScenario = tool({
+    name: "analyze_paycheck_scenario",
+    description: "Run the one authoritative cash-flow calculation for this request. Omit disruption for ordinary planning, or include the user's delayed pay, reduced income, and unexpected expenses. Call exactly once.",
     inputSchema: SessionInput.extend({
       asOf: IsoDateSchema,
-      disruption: DisruptionSchema
+      disruption: DisruptionSchema.optional()
     }),
-    callback: ({ sessionId, asOf, disruption }) => analyzeCashflow(planStore.get(sessionId), asOf, disruption)
+    callback: ({ sessionId, asOf, disruption }) => {
+      const analysis = analyzeCashflow(planStore.get(sessionId), asOf, disruption);
+      observer.onPrimaryAnalysis?.(analysis);
+      return analysis;
+    }
   });
 
   const identifyPressurePoints = tool({
@@ -79,5 +89,5 @@ export function createFinancialTools(planStore: PlanStore) {
     }
   });
 
-  return [getFinancialSnapshot, buildCashflowTimeline, simulateDisruption, identifyPressurePoints, comparePlanOptions, evaluatePolicyRelief];
+  return [getFinancialSnapshot, analyzePaycheckScenario, identifyPressurePoints, comparePlanOptions, evaluatePolicyRelief];
 }

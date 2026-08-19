@@ -114,21 +114,83 @@ export const ActionTypeSchema = z.enum([
   "use_credit"
 ]);
 
+export const VerificationIssueCodeSchema = z.enum([
+  "arithmetic",
+  "protected_essentials",
+  "assumption",
+  "external_action",
+  "policy_support",
+  "user_autonomy",
+  "harmful_advice"
+]);
+
+export const VerifierModelResultSchema = z.object({
+  failedChecks: z.array(VerificationIssueCodeSchema).max(7)
+});
+
+export const VerifierResultSchema = z.object({
+  verdict: z.enum(["verified", "corrections_required"]),
+  checks: z.object({
+    arithmeticGrounded: z.boolean(),
+    protectedEssentials: z.boolean(),
+    assumptionsExplicit: z.boolean(),
+    externalActionsRemainReadOnly: z.boolean(),
+    policyClaimsSupported: z.boolean(),
+    userAutonomyPreserved: z.boolean(),
+    harmfulAdviceAbsent: z.boolean()
+  }),
+  corrections: z.array(z.object({
+    code: VerificationIssueCodeSchema,
+    instruction: z.string().min(1).max(300)
+  })).max(7)
+}).superRefine((result, context) => {
+  const allChecksPassed = Object.values(result.checks).every(Boolean);
+  if (result.verdict === "verified" && (!allChecksPassed || result.corrections.length > 0)) {
+    context.addIssue({
+      code: "custom",
+      path: ["verdict"],
+      message: "A verified result requires every check to pass and no corrections."
+    });
+  }
+  if (result.verdict === "corrections_required" && (allChecksPassed || result.corrections.length === 0)) {
+    context.addIssue({
+      code: "custom",
+      path: ["corrections"],
+      message: "A corrections-required result needs a failed check and at least one correction."
+    });
+  }
+}).describe("A compact independent verification verdict for a proposed paycheck plan");
+
+const RecommendationOptionSchema = z.object({
+  title: z.string().min(1).max(120),
+  impact: z.number().finite().describe("Estimated dollars of additional room this option creates"),
+  upside: z.string().min(1).max(500).describe("A concrete benefit of this option, without value judgment"),
+  tradeoff: z.string().min(1).max(500).describe("A concrete cost, downside, or limitation of this option"),
+  fitPriority: z.string().min(1).max(300)
+    .default("weighing this option's stated upside against its stated tradeoff")
+    .describe("A neutral user priority this option fits; application code supplies a neutral default when omitted; do not prescribe the choice or begin with 'If'")
+});
+
+const AgentDecisionSupportSchema = z.object({
+  decisionOwner: z.literal("user").describe("The user retains the value-dependent decision")
+});
+
+const FinalDecisionSupportSchema = AgentDecisionSupportSchema.extend({
+  choicePrompt: z.literal("Which option's tradeoffs fit your priorities?")
+});
+
 const RecommendationCoreSchema = z.object({
   summary: z.string().min(1).describe("A concise, empathetic answer grounded in tool results"),
-  riskLevel: z.enum(["stable", "tight", "shortfall"]).describe("The primary timeline or disruption tool's riskLevel before optional plan changes"),
-  safeToSpend: z.number().nonnegative().describe("The primary timeline or disruption tool's safeToSpend before optional plan changes"),
-  dailyFlexibleLimit: z.number().nonnegative().nullable().describe("The primary timeline or disruption tool's dailyFlexibleLimit before optional plan changes"),
+  riskLevel: z.enum(["stable", "tight", "shortfall"]).describe("The analyze_paycheck_scenario riskLevel before optional plan changes"),
+  safeToSpend: z.number().nonnegative().describe("The analyze_paycheck_scenario safeToSpend before optional plan changes"),
+  dailyFlexibleLimit: z.number().nonnegative().nullable().describe("The analyze_paycheck_scenario dailyFlexibleLimit before optional plan changes"),
   assumptions: z.array(z.string()),
   evidence: z.array(z.object({
     source: z.string(),
     finding: z.string()
   })).min(1),
-  options: z.array(z.object({
-    title: z.string(),
-    impact: z.number().describe("Estimated dollars of additional room this option creates"),
-    tradeoff: z.string()
-  })),
+  options: z.array(RecommendationOptionSchema).min(1).max(6),
+  decisionSupport: AgentDecisionSupportSchema,
   recommendedActions: z.array(z.object({
     title: z.string(),
     rationale: z.string(),
@@ -137,11 +199,11 @@ const RecommendationCoreSchema = z.object({
   policyFindings: z.array(PolicyFindingSchema).default([]).describe("Only findings returned by review_terms_and_policies; use an empty array when no policy source was reviewed")
 });
 
-export const AgentRecommendationSchema = RecommendationCoreSchema.extend({
-  verificationNotes: z.array(z.string())
-}).describe("The final evidence-backed paycheck plan after the verifier's corrections have been applied");
+export const AgentRecommendationSchema = RecommendationCoreSchema.describe(
+  "The final evidence-backed paycheck plan after the verifier has returned a verified verdict"
+);
 
-export const RecommendationSchema = RecommendationCoreSchema.omit({ recommendedActions: true }).extend({
+export const RecommendationSchema = RecommendationCoreSchema.omit({ recommendedActions: true, decisionSupport: true }).extend({
   recommendedActions: z.array(z.object({
     title: z.string(),
     rationale: z.string(),
@@ -152,6 +214,7 @@ export const RecommendationSchema = RecommendationCoreSchema.omit({ recommendedA
     checked: z.literal(true),
     notes: z.array(z.string())
   }),
+  decisionSupport: FinalDecisionSupportSchema,
   disclaimer: z.literal("Planning guidance, not financial advice.")
 });
 
@@ -180,6 +243,8 @@ export type PolicyFinding = z.infer<typeof PolicyFindingSchema>;
 export type PolicyReview = z.infer<typeof PolicyReviewSchema>;
 export type PolicyReliefOption = z.infer<typeof PolicyReliefOptionSchema>;
 export type ActionType = z.infer<typeof ActionTypeSchema>;
+export type VerifierModelResult = z.infer<typeof VerifierModelResultSchema>;
+export type VerifierResult = z.infer<typeof VerifierResultSchema>;
 export type AgentRecommendation = z.infer<typeof AgentRecommendationSchema>;
 export type Recommendation = z.infer<typeof RecommendationSchema>;
 export type SafetyPreviewRequest = z.infer<typeof SafetyPreviewRequestSchema>;

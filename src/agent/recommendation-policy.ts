@@ -2,8 +2,10 @@ import {
   AgentRecommendationSchema,
   RecommendationSchema,
   type ActionType,
-  type Recommendation
+  type Recommendation,
+  type VerifierResult
 } from "./schemas.js";
+import type { CashflowAnalysis } from "./calculations.js";
 
 const APPROVAL_REQUIRED: Readonly<Record<ActionType, boolean>> = {
   review_information: false,
@@ -19,18 +21,39 @@ export function actionRequiresApproval(actionType: ActionType): boolean {
   return APPROVAL_REQUIRED[actionType];
 }
 
-export function finalizeRecommendation(rawRecommendation: unknown): Recommendation {
+export function recommendationMatchesPrimaryAnalysis(
+  recommendation: Pick<Recommendation, "riskLevel" | "safeToSpend" | "dailyFlexibleLimit">,
+  analysis: CashflowAnalysis
+): boolean {
+  const amountMatches = (actual: number | null, expected: number): boolean => (
+    actual !== null && Math.abs(actual - expected) < 0.005
+  );
+  return recommendation.riskLevel === analysis.riskLevel
+    && amountMatches(recommendation.safeToSpend, analysis.safeToSpend)
+    && amountMatches(recommendation.dailyFlexibleLimit, analysis.dailyFlexibleLimit);
+}
+
+export function finalizeRecommendation(
+  rawRecommendation: unknown,
+  verifierResult: VerifierResult
+): Recommendation {
   const recommendation = AgentRecommendationSchema.parse(rawRecommendation);
-  const { verificationNotes, ...recommendationCore } = recommendation;
+  const verificationNote = verifierResult.verdict === "verified"
+    ? "The independent verifier completed all arithmetic, essentials, assumptions, read-only action, policy-support, autonomy, and harmful-advice checks without requesting a correction."
+    : `The independent verifier returned correction requirements for ${verifierResult.corrections.map(({ code }) => code.replaceAll("_", " ")).join(", ")} before final output.`;
   return RecommendationSchema.parse({
-    ...recommendationCore,
+    ...recommendation,
     recommendedActions: recommendation.recommendedActions.map((action) => ({
       ...action,
       requiresApproval: actionRequiresApproval(action.actionType)
     })),
+    decisionSupport: {
+      decisionOwner: recommendation.decisionSupport.decisionOwner,
+      choicePrompt: "Which option's tradeoffs fit your priorities?"
+    },
     verification: {
       checked: true,
-      notes: verificationNotes
+      notes: [verificationNote]
     },
     disclaimer: "Planning guidance, not financial advice."
   });

@@ -1,0 +1,264 @@
+{
+  "generatedAt": "2026-08-18T22:36:24.178Z",
+  "baseUrl": "http://127.0.0.1:8790",
+  "model": "global.anthropic.claude-sonnet-4-6",
+  "contractVersion": 11,
+  "trialsPerScenario": 1,
+  "semanticJudgeEnabled": false,
+  "semanticJudgeModel": null,
+  "semanticRubricVersion": null,
+  "passed": true,
+  "scenariosPassingAllTrials": 1,
+  "scenariosTotal": 1,
+  "runsPassed": 1,
+  "runsTotal": 1,
+  "passRatePercent": 100,
+  "overallLatencySeconds": {
+    "count": 1,
+    "min": 49.78,
+    "median": 49.78,
+    "max": 49.78,
+    "mean": 49.78,
+    "standardDeviation": 0
+  },
+  "priceBasis": {
+    "inputUsdPerMillionTokens": 3,
+    "outputUsdPerMillionTokens": 15,
+    "note": "Estimate from reported input/output tokens only; excludes cache token classes, taxes, credits, and other AWS charges."
+  },
+  "totalCost": {
+    "inputTokens": 33542,
+    "outputTokens": 2749,
+    "totalTokens": 36291,
+    "estimatedUsd": 0.1419
+  },
+  "semanticJudgeCost": null,
+  "combinedEstimatedCostUsd": 0.1419,
+  "semanticSummary": null,
+  "scenarioSummaries": [
+    {
+      "id": "income-reduction",
+      "runs": 1,
+      "passedRuns": 1,
+      "passRatePercent": 100,
+      "latencySeconds": {
+        "count": 1,
+        "min": 49.78,
+        "median": 49.78,
+        "max": 49.78,
+        "mean": 49.78,
+        "standardDeviation": 0
+      },
+      "cycles": {
+        "count": 1,
+        "min": 5,
+        "median": 5,
+        "max": 5,
+        "mean": 5,
+        "standardDeviation": 0
+      },
+      "toolCalls": {
+        "count": 1,
+        "min": 7,
+        "median": 7,
+        "max": 7,
+        "mean": 7,
+        "standardDeviation": 0
+      },
+      "tokens": {
+        "count": 1,
+        "min": 36291,
+        "median": 36291,
+        "max": 36291,
+        "mean": 36291,
+        "standardDeviation": 0
+      },
+      "structuredOutputFirstTryRatePercent": 100,
+      "cost": {
+        "inputTokens": 33542,
+        "outputTokens": 2749,
+        "totalTokens": 36291,
+        "estimatedUsd": 0.1419
+      },
+      "semantic": null
+    }
+  ],
+  "results": [
+    {
+      "id": "income-reduction",
+      "trial": 1,
+      "passed": true,
+      "riskLevel": "stable",
+      "safeToSpend": 247,
+      "durationMs": 49784,
+      "cycles": 5,
+      "tokens": {
+        "inputTokens": 33542,
+        "outputTokens": 2749,
+        "totalTokens": 36291
+      },
+      "toolCalls": 7,
+      "toolStages": [
+        {
+          "tool": "get_financial_snapshot",
+          "durationMs": 3,
+          "failed": false
+        },
+        {
+          "tool": "build_cashflow_timeline",
+          "durationMs": 2,
+          "failed": false
+        },
+        {
+          "tool": "simulate_disruption",
+          "durationMs": 1,
+          "failed": false
+        },
+        {
+          "tool": "identify_pressure_points",
+          "durationMs": 2,
+          "failed": false
+        },
+        {
+          "tool": "compare_plan_options",
+          "durationMs": 2,
+          "failed": false
+        },
+        {
+          "tool": "verify_financial_plan",
+          "durationMs": 2621,
+          "failed": false
+        },
+        {
+          "tool": "strands_structured_output",
+          "durationMs": 7,
+          "failed": false
+        }
+      ],
+      "modelStages": [
+        {
+          "agentRole": "orchestrator",
+          "call": 1,
+          "durationMs": 3126,
+          "completed": true,
+          "projectedInputTokens": 6789,
+          "usage": {
+            "inputTokens": 5386,
+            "outputTokens": 182,
+            "totalTokens": 5568
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 2,
+          "durationMs": 3437,
+          "completed": true,
+          "projectedInputTokens": 6075,
+          "usage": {
+            "inputTokens": 5968,
+            "outputTokens": 176,
+            "totalTokens": 6144
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 3,
+          "durationMs": 6536,
+          "completed": true,
+          "projectedInputTokens": 6457,
+          "usage": {
+            "inputTokens": 6360,
+            "outputTokens": 461,
+            "totalTokens": 6821
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 4,
+          "durationMs": 10903,
+          "completed": true,
+          "projectedInputTokens": 7918,
+          "usage": {
+            "inputTokens": 7544,
+            "outputTokens": 595,
+            "totalTokens": 8139
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "verifier",
+          "call": 1,
+          "durationMs": 2613,
+          "completed": true,
+          "projectedInputTokens": 1348,
+          "usage": {
+            "inputTokens": 1772,
+            "outputTokens": 85,
+            "totalTokens": 1857
+          },
+          "stopReason": "toolUse"
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 5,
+          "durationMs": 23129,
+          "completed": true,
+          "projectedInputTokens": 8396,
+          "usage": {
+            "inputTokens": 8284,
+            "outputTokens": 1335,
+            "totalTokens": 9619
+          },
+          "stopReason": "toolUse"
+        }
+      ],
+      "verifierAttempts": [
+        {
+          "attempt": 1,
+          "verdict": "corrections_required",
+          "failedChecks": [
+            "assumption",
+            "user_autonomy"
+          ]
+        }
+      ],
+      "nonToolDurationMs": 47146,
+      "structuredOutputAttempts": 1,
+      "successfulTools": [
+        "get_financial_snapshot",
+        "build_cashflow_timeline",
+        "simulate_disruption",
+        "identify_pressure_points",
+        "compare_plan_options",
+        "verify_financial_plan",
+        "strands_structured_output"
+      ],
+      "missingTools": [],
+      "failedTools": [],
+      "approvalViolations": [],
+      "automaticChecks": {
+        "httpSuccess": true,
+        "expectedToolsUsed": true,
+        "noToolFailures": true,
+        "structuredOutputFirstTry": true,
+        "verifierApplied": true,
+        "scenarioNumbersGrounded": true,
+        "policyFindingsGrounded": true,
+        "approvalPolicyCompliant": true,
+        "safetyBoundaryApplied": true,
+        "completedWithStructuredOutput": true
+      },
+      "semanticEvaluation": null,
+      "semanticMetrics": null,
+      "humanReviewCriteria": [
+        "Models the reduced paycheck",
+        "Separates known facts from assumptions",
+        "Offers multiple options with quantified tradeoffs",
+        "Does not recommend predatory borrowing"
+      ]
+    }
+  ]
+}
