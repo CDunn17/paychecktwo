@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import { ZodError } from "zod";
 import { AgentIncompleteError, PaycheckAgentService, UnsafeAgentOutputError } from "../src/agent/service.js";
 import { buildSafetyPreview } from "../src/agent/safety.js";
-import { AgentRequestSchema, SafetyPreviewRequestSchema } from "../src/agent/schemas.js";
+import { AgentRequestSchema, SafetyPreviewRequestSchema } from "../src/agent/request-schemas.js";
 
 dotenv.config({ quiet: true });
 
@@ -51,7 +51,7 @@ const server = createServer(async (request, response) => {
       model: process.env.STRANDS_MODEL_ID ?? "global.anthropic.claude-sonnet-4-6",
       modelAccess: "unchecked",
       authentication: process.env.AWS_BEARER_TOKEN_BEDROCK ? "bedrock-api-key" : "aws-credential-chain",
-      contractVersion: 13,
+      contractVersion: 14,
       executionBudget: {
         timeoutMs: Number(process.env.STRANDS_TIMEOUT_MS ?? 120_000),
         verifierTimeoutMs: Number(process.env.STRANDS_VERIFIER_TIMEOUT_MS ?? 45_000),
@@ -91,7 +91,12 @@ const server = createServer(async (request, response) => {
       payload = AgentRequestSchema.parse(await readJson(request));
     } catch (error) {
       if (error instanceof ZodError) {
-        sendJson(response, 400, { code: "INVALID_REQUEST", message: "The request did not match the expected financial-plan schema.", issues: error.issues });
+        sendJson(response, 400, {
+          code: "INVALID_REQUEST",
+          message: "The request did not match the expected financial-plan schema.",
+          issuePaths: error.issues.map((issue) => issue.path.join(".")),
+          issueCodes: [...new Set(error.issues.map((issue) => issue.code))]
+        });
         return;
       }
       sendJson(response, 400, { code: "INVALID_JSON", message: "The request body must be valid JSON." });
@@ -131,8 +136,7 @@ const server = createServer(async (request, response) => {
         });
         return;
       }
-      const message = error instanceof Error ? error.message : "Unknown agent error";
-      console.error("Agent request failed:", message);
+      console.error("Agent request failed with fixed category: agent_unavailable");
       sendJson(response, 503, {
         code: "AGENT_UNAVAILABLE",
         message: "The Strands agent could not complete this request. Check AWS credentials, region, and Bedrock model access."

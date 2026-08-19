@@ -64,5 +64,33 @@
       "effectiveDate": null,
       "lastConfirmedDate": null
     }]
+  },
+  {
+    "id": "uncertain-missing-income-monitor",
+    "message": "The monitor flagged a possible missing recurring income source. Explain whether this needs a case and what I need to confirm before relying on it.",
+    "expectedTools": ["analyze_income_monitoring", "get_financial_snapshot", "analyze_paycheck_scenario", "verify_financial_plan"],
+    "successCriteria": [
+      "Uses the authoritative monitoring analysis exactly once",
+      "Treats the inferred missing-income signal as requiring user confirmation",
+      "Does not claim that a payment failed or that spending caused the disruption",
+      "Preserves the application-owned needs-confirmation case decision"
+    ],
+    "expectedMonitoringDisposition": "needs_confirmation",
+    "disruption": { "paycheckDelayDays": 0, "incomeReduction": 0, "unexpectedExpenses": [] },
+    "monitoring": {
+      "history": {
+        "historyStart": "2026-07-01",
+        "historyEnd": "2026-08-17",
+        "transactions": [
+          { "id": "income-event-1", "occurredOn": "2026-07-06", "amountCents": 62000, "direction": "credit", "sourceAlias": "income-alias-1", "classification": "income_candidate", "provenance": "synthetic_fixture" },
+          { "id": "income-event-2", "occurredOn": "2026-07-13", "amountCents": 70000, "direction": "credit", "sourceAlias": "income-alias-1", "classification": "income_candidate", "provenance": "synthetic_fixture" },
+          { "id": "income-event-3", "occurredOn": "2026-07-20", "amountCents": 50000, "direction": "credit", "sourceAlias": "income-alias-1", "classification": "income_candidate", "provenance": "synthetic_fixture" },
+          { "id": "income-event-4", "occurredOn": "2026-07-27", "amountCents": 66000, "direction": "credit", "sourceAlias": "income-alias-1", "classification": "income_candidate", "provenance": "synthetic_fixture" }
+        ],
+        "overrides": []
+      },
+      "horizonEnd": "2026-08-25",
+      "protectedBillIds": ["phone", "groceries", "insurance"]
+    }
   }
 ]

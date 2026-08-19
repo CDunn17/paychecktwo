@@ -16,12 +16,14 @@ const SessionInput = z.object({
 
 export interface FinancialToolObserver {
   onPrimaryAnalysis?: (analysis: CashflowAnalysis) => void;
+  onMonitoringAnalysis?: () => void;
 }
 
 export function createFinancialTools(
   planStore: PlanStore,
   observer: FinancialToolObserver = {}
 ) {
+  let monitoringAnalysisCalls = 0;
   const getFinancialSnapshot = tool({
     name: "get_financial_snapshot",
     description: "Load the authoritative balance, paycheck, buffer, payday, and bills for a Paycheck Two session. Always call this before analysis.",
@@ -40,6 +42,21 @@ export function createFinancialTools(
       const analysis = analyzeCashflow(planStore.get(sessionId), asOf, disruption);
       observer.onPrimaryAnalysis?.(analysis);
       return analysis;
+    }
+  });
+
+  const analyzeIncomeMonitoring = tool({
+    name: "analyze_income_monitoring",
+    description: "Load the one authoritative, locally calculated income-monitoring analysis and application-owned case decision for this request. Call exactly once only when the request says monitoring analysis is available. The result contains no raw transaction history and cannot initiate an external action.",
+    inputSchema: SessionInput,
+    callback: ({ sessionId }) => {
+      if (monitoringAnalysisCalls >= 1) {
+        throw new Error("The authoritative monitoring analysis has already been retrieved for this request.");
+      }
+      monitoringAnalysisCalls += 1;
+      const result = planStore.getMonitoringResult(sessionId);
+      observer.onMonitoringAnalysis?.();
+      return result;
     }
   });
 
@@ -89,5 +106,12 @@ export function createFinancialTools(
     }
   });
 
-  return [getFinancialSnapshot, analyzePaycheckScenario, identifyPressurePoints, comparePlanOptions, evaluatePolicyRelief];
+  return [
+    getFinancialSnapshot,
+    analyzeIncomeMonitoring,
+    analyzePaycheckScenario,
+    identifyPressurePoints,
+    comparePlanOptions,
+    evaluatePolicyRelief
+  ];
 }

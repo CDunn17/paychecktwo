@@ -28,6 +28,8 @@ interface EvaluationFixture {
   successCriteria: string[];
   disruption: unknown;
   policySources?: unknown[];
+  monitoring?: unknown;
+  expectedMonitoringDisposition?: "no_case" | "needs_confirmation" | "open_case";
 }
 
 interface TraceEntry {
@@ -283,6 +285,7 @@ for (const fixture of fixtures) {
       plan,
       asOf: "2026-08-17",
       policySources: fixture.policySources ?? [],
+      ...(fixture.monitoring ? { monitoring: fixture.monitoring } : {}),
       privacy: { consentToModel: true, ephemeral: true }
     }),
     signal: AbortSignal.timeout(135_000)
@@ -311,6 +314,15 @@ for (const fixture of fixtures) {
   const primaryAnalysisCalls = completedTrace.filter(
     (entry) => entry.tool === "analyze_paycheck_scenario" && !entry.failed && entry.status !== "error"
   ).length;
+  const monitoringAnalysisCalls = completedTrace.filter(
+    (entry) => entry.tool === "analyze_income_monitoring" && !entry.failed && entry.status !== "error"
+  ).length;
+  const monitoringAnalysisIndex = completedTrace.findIndex(
+    (entry) => entry.tool === "analyze_income_monitoring" && !entry.failed && entry.status !== "error"
+  );
+  const primaryAnalysisIndex = completedTrace.findIndex(
+    (entry) => entry.tool === "analyze_paycheck_scenario" && !entry.failed && entry.status !== "error"
+  );
   const missingTools = fixture.expectedTools.filter((tool) => !successfulTools.has(tool));
   const failedTools = completedTrace.filter((entry) => entry.failed || entry.status === "error").map((entry) => entry.tool);
   const approvalViolations = recommendation.recommendedActions
@@ -329,6 +341,13 @@ for (const fixture of fixtures) {
     httpSuccess: response.ok,
     expectedToolsUsed: missingTools.length === 0,
     exactlyOnePrimaryAnalysis: primaryAnalysisCalls === 1,
+    monitoringRoutingCorrect: fixture.monitoring ? monitoringAnalysisCalls === 1 : monitoringAnalysisCalls === 0,
+    monitoringPrecedesPlanning: fixture.monitoring
+      ? monitoringAnalysisIndex >= 0 && monitoringAnalysisIndex < primaryAnalysisIndex
+      : true,
+    monitoringDecisionGrounded: fixture.monitoring
+      ? recommendation.monitoringDecision?.disposition === fixture.expectedMonitoringDisposition
+      : recommendation.monitoringDecision === null,
     noToolFailures: failedTools.length === 0,
     structuredOutputFirstTry: responseBody.metrics?.structuredOutputAttempts === 1
       && responseBody.metrics.structuredOutputFailures === 0,

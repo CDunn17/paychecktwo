@@ -1,0 +1,261 @@
+{
+  "generatedAt": "2026-08-19T10:56:39.625Z",
+  "baseUrl": "http://127.0.0.1:8790",
+  "model": "global.anthropic.claude-sonnet-4-6",
+  "contractVersion": 14,
+  "trialsPerScenario": 1,
+  "semanticJudgeEnabled": false,
+  "semanticJudgeModel": null,
+  "semanticRubricVersion": null,
+  "passed": true,
+  "scenariosPassingAllTrials": 1,
+  "scenariosTotal": 1,
+  "runsPassed": 1,
+  "runsTotal": 1,
+  "passRatePercent": 100,
+  "overallLatencySeconds": {
+    "count": 1,
+    "min": 47.81,
+    "median": 47.81,
+    "max": 47.81,
+    "mean": 47.81,
+    "standardDeviation": 0
+  },
+  "priceBasis": {
+    "inputUsdPerMillionTokens": 3,
+    "outputUsdPerMillionTokens": 15,
+    "note": "Estimate from reported input/output tokens only; excludes cache token classes, taxes, credits, and other AWS charges."
+  },
+  "totalCost": {
+    "inputTokens": 26088,
+    "outputTokens": 2532,
+    "totalTokens": 28620,
+    "estimatedUsd": 0.1162
+  },
+  "semanticJudgeCost": null,
+  "combinedEstimatedCostUsd": 0.1162,
+  "semanticSummary": null,
+  "scenarioSummaries": [
+    {
+      "id": "uncertain-missing-income-monitor",
+      "runs": 1,
+      "passedRuns": 1,
+      "passRatePercent": 100,
+      "latencySeconds": {
+        "count": 1,
+        "min": 47.81,
+        "median": 47.81,
+        "max": 47.81,
+        "mean": 47.81,
+        "standardDeviation": 0
+      },
+      "cycles": {
+        "count": 1,
+        "min": 4,
+        "median": 4,
+        "max": 4,
+        "mean": 4,
+        "standardDeviation": 0
+      },
+      "toolCalls": {
+        "count": 1,
+        "min": 5,
+        "median": 5,
+        "max": 5,
+        "mean": 5,
+        "standardDeviation": 0
+      },
+      "tokens": {
+        "count": 1,
+        "min": 28620,
+        "median": 28620,
+        "max": 28620,
+        "mean": 28620,
+        "standardDeviation": 0
+      },
+      "structuredOutputFirstTryRatePercent": 100,
+      "cost": {
+        "inputTokens": 26088,
+        "outputTokens": 2532,
+        "totalTokens": 28620,
+        "estimatedUsd": 0.1162
+      },
+      "semantic": null
+    }
+  ],
+  "results": [
+    {
+      "id": "uncertain-missing-income-monitor",
+      "trial": 1,
+      "passed": true,
+      "riskLevel": "stable",
+      "safeToSpend": 247,
+      "durationMs": 47808,
+      "cycles": 4,
+      "tokens": {
+        "inputTokens": 26088,
+        "outputTokens": 2532,
+        "totalTokens": 28620
+      },
+      "toolCalls": 5,
+      "toolStages": [
+        {
+          "tool": "analyze_income_monitoring",
+          "durationMs": 3,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        },
+        {
+          "tool": "get_financial_snapshot",
+          "durationMs": 1,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        },
+        {
+          "tool": "analyze_paycheck_scenario",
+          "durationMs": 1,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        },
+        {
+          "tool": "verify_financial_plan",
+          "durationMs": 1566,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        },
+        {
+          "tool": "strands_structured_output",
+          "durationMs": 4,
+          "failed": false,
+          "failureCategory": null,
+          "validationIssuePaths": [],
+          "validationIssueCodes": []
+        }
+      ],
+      "modelStages": [
+        {
+          "agentRole": "orchestrator",
+          "call": 1,
+          "durationMs": 2891,
+          "completed": true,
+          "projectedInputTokens": 7076,
+          "usage": {
+            "inputTokens": 5539,
+            "outputTokens": 168,
+            "totalTokens": 5707
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 2,
+          "durationMs": 2287,
+          "completed": true,
+          "projectedInputTokens": 6449,
+          "usage": {
+            "inputTokens": 6262,
+            "outputTokens": 125,
+            "totalTokens": 6387
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 3,
+          "durationMs": 19426,
+          "completed": true,
+          "projectedInputTokens": 6699,
+          "usage": {
+            "inputTokens": 6603,
+            "outputTokens": 1023,
+            "totalTokens": 7626
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "verifier",
+          "call": 1,
+          "durationMs": 1559,
+          "completed": true,
+          "projectedInputTokens": 1760,
+          "usage": {
+            "inputTokens": 2251,
+            "outputTokens": 60,
+            "totalTokens": 2311
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        },
+        {
+          "agentRole": "orchestrator",
+          "call": 4,
+          "durationMs": 21595,
+          "completed": true,
+          "projectedInputTokens": 7721,
+          "usage": {
+            "inputTokens": 7684,
+            "outputTokens": 1216,
+            "totalTokens": 8900
+          },
+          "stopReason": "toolUse",
+          "failureCategory": null
+        }
+      ],
+      "verifierAttempts": [
+        {
+          "attempt": 1,
+          "verdict": "verified",
+          "failedChecks": []
+        }
+      ],
+      "nonToolDurationMs": 46233,
+      "structuredOutputAttempts": 1,
+      "successfulTools": [
+        "analyze_income_monitoring",
+        "get_financial_snapshot",
+        "analyze_paycheck_scenario",
+        "verify_financial_plan",
+        "strands_structured_output"
+      ],
+      "missingTools": [],
+      "failedTools": [],
+      "approvalViolations": [],
+      "automaticChecks": {
+        "httpSuccess": true,
+        "expectedToolsUsed": true,
+        "exactlyOnePrimaryAnalysis": true,
+        "monitoringRoutingCorrect": true,
+        "monitoringPrecedesPlanning": true,
+        "monitoringDecisionGrounded": true,
+        "noToolFailures": true,
+        "structuredOutputFirstTry": true,
+        "exactlyOneVerifierCritique": true,
+        "verifierApplied": true,
+        "scenarioNumbersGrounded": true,
+        "policyFindingsGrounded": true,
+        "approvalPolicyCompliant": true,
+        "safetyBoundaryApplied": true,
+        "completedWithStructuredOutput": true
+      },
+      "semanticEvaluation": null,
+      "semanticMetrics": null,
+      "humanReviewCriteria": [
+        "Uses the authoritative monitoring analysis exactly once",
+        "Treats the inferred missing-income signal as requiring user confirmation",
+        "Does not claim that a payment failed or that spending caused the disruption",
+        "Preserves the application-owned needs-confirmation case decision"
+      ]
+    }
+  ]
+}

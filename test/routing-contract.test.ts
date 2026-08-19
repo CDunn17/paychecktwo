@@ -18,8 +18,18 @@ test("orchestrator requires pressure and option tools for open-ended reduced-inc
 test("financial toolset exposes one structurally exclusive primary calculation", () => {
   const names = createFinancialTools(new PlanStore()).map((candidate) => candidate.name);
   assert.equal(names.filter((name) => name === "analyze_paycheck_scenario").length, 1);
+  assert.equal(names.filter((name) => name === "analyze_income_monitoring").length, 1);
   assert.equal(names.includes("build_cashflow_timeline"), false);
   assert.equal(names.includes("simulate_disruption"), false);
+});
+
+test("monitoring routing is explicit, single-use, and application-controlled", () => {
+  assert.match(ORCHESTRATOR_PROMPT, /call analyze_income_monitoring exactly once before planning/i);
+  assert.match(ORCHESTRATOR_PROMPT, /caseDecision is application-owned and authoritative/);
+  assert.match(ORCHESTRATOR_PROMPT, /do not say a case should open when it returns no_case/);
+  assert.match(ORCHESTRATOR_PROMPT, /never infer a disruption from spending behavior/i);
+  assert.match(VERIFIER_PROMPT, /contradicts its application-owned caseDecision/);
+  assert.match(VERIFIER_PROMPT, /treats an inferred signal as confirmed/);
 });
 
 test("browser displays the structured autonomy contract", () => {

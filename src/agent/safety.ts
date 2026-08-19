@@ -1,4 +1,4 @@
-import type { AgentRequest, SafetyPreviewRequest } from "./schemas.js";
+import type { AgentRequest, SafetyPreviewRequest } from "./request-schemas.js";
 
 export type SensitiveDataCategory =
   | "aws_access_key"
@@ -24,7 +24,9 @@ export interface SensitiveDataSummary {
 export interface SafetyPreview {
   destination: "Amazon Bedrock via Strands";
   fieldsSent: string[];
+  localOnlyFields: string[];
   policySourceCount: number;
+  monitoringHistorySentToModel: false;
   redactions: SensitiveDataSummary[];
   rawMatchedValuesReturned: false;
   ephemeralByDefault: true;
@@ -149,9 +151,13 @@ export function sanitizeAgentRequest<T extends AgentRequest | SafetyPreviewReque
   sanitized.sessionId = sanitizeIdentifier(sanitized.sessionId, "sessionId", "redacted-session", findings);
   sanitized.message = sanitizeText(sanitized.message, "message", findings);
   sanitized.plan.name = sanitizeText(sanitized.plan.name, "plan.name", findings);
+  const sanitizedBillIds = new Map(sanitized.plan.bills.map((bill, index) => [
+    bill.id,
+    sanitizeIdentifier(bill.id, `plan.bills.${index}.id`, `redacted-bill-${index + 1}`, findings)
+  ]));
   sanitized.plan.bills = sanitized.plan.bills.map((bill, index) => ({
     ...bill,
-    id: sanitizeIdentifier(bill.id, `plan.bills.${index}.id`, `redacted-bill-${index + 1}`, findings),
+    id: sanitizedBillIds.get(bill.id) ?? `redacted-bill-${index + 1}`,
     name: sanitizeText(bill.name, `plan.bills.${index}.name`, findings),
     category: sanitizeText(bill.category, `plan.bills.${index}.category`, findings),
     icon: bill.icon === undefined ? undefined : sanitizeText(bill.icon, `plan.bills.${index}.icon`, findings)
@@ -166,6 +172,38 @@ export function sanitizeAgentRequest<T extends AgentRequest | SafetyPreviewReque
       ? null
       : sanitizeText(source.sourceReference, `policySources.${index}.sourceReference`, findings)
   }));
+  if (sanitized.monitoring) {
+    sanitized.monitoring.protectedBillIds = sanitized.monitoring.protectedBillIds.map(
+      (billId) => sanitizedBillIds.get(billId) ?? "redacted-bill"
+    );
+    const aliases = [...new Set([
+      ...sanitized.monitoring.history.transactions.map(({ sourceAlias }) => sourceAlias),
+      ...sanitized.monitoring.history.overrides.map(({ sourceAlias }) => sourceAlias)
+    ])];
+    const sanitizedAliases = new Map(aliases.map((alias, index) => [
+      alias,
+      sanitizeIdentifier(
+        alias,
+        `monitoring.history.sourceAliases.${index}`,
+        `redacted-income-source-${index + 1}`,
+        findings
+      )
+    ]));
+    sanitized.monitoring.history.transactions = sanitized.monitoring.history.transactions.map((transaction, index) => ({
+      ...transaction,
+      id: sanitizeIdentifier(
+        transaction.id,
+        `monitoring.history.transactions.${index}.id`,
+        `redacted-transaction-${index + 1}`,
+        findings
+      ),
+      sourceAlias: sanitizedAliases.get(transaction.sourceAlias) ?? `redacted-income-source-${index + 1}`
+    }));
+    sanitized.monitoring.history.overrides = sanitized.monitoring.history.overrides.map((override) => ({
+      ...override,
+      sourceAlias: sanitizedAliases.get(override.sourceAlias) ?? "redacted-income-source"
+    }));
+  }
   return { request: sanitized, findings, summary: summarizeSensitiveData(findings) };
 }
 
@@ -177,9 +215,16 @@ export function buildSafetyPreview(request: SafetyPreviewRequest): SafetyPreview
       "Your question",
       "Balance, paycheck, buffer, and dates",
       "Bill names, categories, amounts, and due dates",
+      ...(request.monitoring ? [
+        "Locally derived generic income-source confidence, disruption codes, coverage forecast, and case decision"
+      ] : []),
       ...(request.policySources.length > 0 ? ["Saved policy sources relevant to the question"] : [])
     ],
+    localOnlyFields: request.monitoring ? [
+      "Synthetic normalized transaction IDs, dates, amounts, directions, source aliases, classifications, and user pattern corrections"
+    ] : [],
     policySourceCount: request.policySources.length,
+    monitoringHistorySentToModel: false,
     redactions: summary,
     rawMatchedValuesReturned: false,
     ephemeralByDefault: true

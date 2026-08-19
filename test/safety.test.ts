@@ -6,7 +6,7 @@ import {
   inspectUnknownForSensitiveData,
   sanitizeAgentRequest
 } from "../src/agent/safety.js";
-import { AgentRequestSchema, SafetyPreviewRequestSchema } from "../src/agent/schemas.js";
+import { AgentRequestSchema, SafetyPreviewRequestSchema } from "../src/agent/request-schemas.js";
 
 const baseRequest = {
   sessionId: "safety-test",
@@ -108,8 +108,47 @@ test("preview describes transmission and redactions without returning matched va
 
   assert.equal(preview.destination, "Amazon Bedrock via Strands");
   assert.equal(preview.rawMatchedValuesReturned, false);
+  assert.equal(preview.monitoringHistorySentToModel, false);
   assert.deepEqual(preview.redactions, [{ category: "email", count: 1, severity: "medium" }]);
   assert.equal(serialized.includes("person@example.com"), false);
+});
+
+test("monitoring history stays local and sensitive opaque identifiers are replaced consistently", () => {
+  const request = AgentRequestSchema.parse({
+    ...baseRequest,
+    plan: {
+      ...baseRequest.plan,
+      bills: [{ ...baseRequest.plan.bills[0], id: "4111111111111111" }]
+    },
+    monitoring: {
+      history: {
+        historyStart: "2026-07-01",
+        historyEnd: "2026-08-17",
+        transactions: [
+          { id: "4111111111111111", occurredOn: "2026-07-01", amountCents: 50_000, direction: "credit", sourceAlias: fakeAwsAccessKey, classification: "income_candidate", provenance: "synthetic_fixture" },
+          { id: "event-2", occurredOn: "2026-07-08", amountCents: 50_000, direction: "credit", sourceAlias: fakeAwsAccessKey, classification: "income_candidate", provenance: "synthetic_fixture" },
+          { id: "event-3", occurredOn: "2026-07-15", amountCents: 50_000, direction: "credit", sourceAlias: fakeAwsAccessKey, classification: "income_candidate", provenance: "synthetic_fixture" }
+        ],
+        overrides: [{ sourceAlias: fakeAwsAccessKey, action: "confirm", kind: "hourly_job" }]
+      },
+      horizonEnd: "2026-08-25",
+      protectedBillIds: ["4111111111111111"]
+    },
+    privacy: { consentToModel: true, ephemeral: true }
+  });
+  const result = sanitizeAgentRequest(request);
+  const serialized = JSON.stringify(result.request);
+
+  assert.equal(serialized.includes(fakeAwsAccessKey), false);
+  assert.equal(serialized.includes("4111111111111111"), false);
+  assert.equal(result.request.monitoring?.history.transactions[0]?.sourceAlias, "redacted-income-source-1");
+  assert.equal(result.request.monitoring?.history.overrides[0]?.sourceAlias, "redacted-income-source-1");
+  assert.equal(result.request.monitoring?.protectedBillIds[0], "redacted-bill-1");
+
+  const preview = buildSafetyPreview(request);
+  assert.equal(preview.monitoringHistorySentToModel, false);
+  assert.equal(preview.localOnlyFields.length, 1);
+  assert.match(preview.fieldsSent.join(" "), /Locally derived generic income-source confidence/);
 });
 
 test("requires explicit model consent and defaults accepted requests to ephemeral", () => {

@@ -179,6 +179,65 @@ const FinalDecisionSupportSchema = AgentDecisionSupportSchema.extend({
   choicePrompt: z.literal("Which option's tradeoffs fit your priorities?")
 });
 
+export const MonitoringCaseDecisionSchema = z.object({
+  disposition: z.enum(["no_case", "needs_confirmation", "open_case"]),
+  shouldOpenCase: z.boolean(),
+  reasonCodes: z.array(z.enum([
+    "unconfirmed_income_signal",
+    "protected_obligation_risk",
+    "no_material_or_uncertain_disruption"
+  ])).min(1).max(2),
+  activeDisruptionCount: z.number().int().nonnegative(),
+  uncertainDisruptionCount: z.number().int().nonnegative(),
+  protectedObligationRiskCount: z.number().int().nonnegative()
+}).superRefine((decision, context) => {
+  if (decision.shouldOpenCase !== (decision.disposition !== "no_case")) {
+    context.addIssue({
+      code: "custom",
+      path: ["shouldOpenCase"],
+      message: "Only material or uncertain monitoring signals may open a case."
+    });
+  }
+  if (decision.disposition === "no_case"
+    && (decision.reasonCodes.length !== 1 || decision.reasonCodes[0] !== "no_material_or_uncertain_disruption")) {
+    context.addIssue({
+      code: "custom",
+      path: ["reasonCodes"],
+      message: "A no-case decision requires the fixed no-signal reason."
+    });
+  }
+  if (decision.disposition !== "no_case" && decision.reasonCodes.includes("no_material_or_uncertain_disruption")) {
+    context.addIssue({
+      code: "custom",
+      path: ["reasonCodes"],
+      message: "An opened case cannot use the no-signal reason."
+    });
+  }
+  if (decision.disposition === "needs_confirmation"
+    && !decision.reasonCodes.includes("unconfirmed_income_signal")) {
+    context.addIssue({
+      code: "custom",
+      path: ["reasonCodes"],
+      message: "A needs-confirmation case requires an unconfirmed income signal."
+    });
+  }
+  if (decision.disposition === "open_case" && decision.protectedObligationRiskCount === 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["protectedObligationRiskCount"],
+      message: "A material open case requires at least one protected obligation at risk."
+    });
+  }
+  if (decision.disposition === "no_case"
+    && (decision.uncertainDisruptionCount > 0 || decision.protectedObligationRiskCount > 0)) {
+    context.addIssue({
+      code: "custom",
+      path: ["disposition"],
+      message: "Uncertain disruptions or protected-obligation risk cannot be classified as no-case."
+    });
+  }
+});
+
 const RecommendationCoreSchema = z.object({
   summary: z.string().min(1).describe("A concise, empathetic answer grounded in tool results"),
   riskLevel: z.enum(["stable", "tight", "shortfall"]).describe("The analyze_paycheck_scenario riskLevel before optional plan changes"),
@@ -214,6 +273,7 @@ export const RecommendationSchema = RecommendationCoreSchema.omit({ recommendedA
     checked: z.literal(true),
     notes: z.array(z.string())
   }),
+  monitoringDecision: MonitoringCaseDecisionSchema.nullable().default(null),
   decisionSupport: FinalDecisionSupportSchema,
   disclaimer: z.literal("Planning guidance, not financial advice.")
 });
@@ -226,9 +286,9 @@ const AgentRequestCoreSchema = z.object({
   policySources: z.array(PolicySourceSchema).max(20).default([])
 });
 
-export const SafetyPreviewRequestSchema = AgentRequestCoreSchema;
+export const PlanningSafetyPreviewRequestSchema = AgentRequestCoreSchema;
 
-export const AgentRequestSchema = AgentRequestCoreSchema.extend({
+export const PlanningAgentRequestSchema = AgentRequestCoreSchema.extend({
   privacy: z.object({
     consentToModel: z.literal(true),
     ephemeral: z.boolean().default(true)
@@ -247,5 +307,6 @@ export type VerifierModelResult = z.infer<typeof VerifierModelResultSchema>;
 export type VerifierResult = z.infer<typeof VerifierResultSchema>;
 export type AgentRecommendation = z.infer<typeof AgentRecommendationSchema>;
 export type Recommendation = z.infer<typeof RecommendationSchema>;
-export type SafetyPreviewRequest = z.infer<typeof SafetyPreviewRequestSchema>;
-export type AgentRequest = z.infer<typeof AgentRequestSchema>;
+export type MonitoringCaseDecision = z.infer<typeof MonitoringCaseDecisionSchema>;
+export type PlanningSafetyPreviewRequest = z.infer<typeof PlanningSafetyPreviewRequestSchema>;
+export type PlanningAgentRequest = z.infer<typeof PlanningAgentRequestSchema>;

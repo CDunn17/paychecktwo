@@ -2,6 +2,7 @@ import {
   AgentRecommendationSchema,
   RecommendationSchema,
   type ActionType,
+  type MonitoringCaseDecision,
   type Recommendation,
   type VerifierResult
 } from "./schemas.js";
@@ -35,7 +36,8 @@ export function recommendationMatchesPrimaryAnalysis(
 
 export function finalizeRecommendation(
   rawRecommendation: unknown,
-  verifierResult: VerifierResult
+  verifierResult: VerifierResult,
+  monitoringDecision: MonitoringCaseDecision | null = null
 ): Recommendation {
   const recommendation = AgentRecommendationSchema.parse(rawRecommendation);
   const verificationNote = verifierResult.verdict === "verified"
@@ -55,6 +57,7 @@ export function finalizeRecommendation(
       checked: true,
       notes: [verificationNote]
     },
+    monitoringDecision,
     disclaimer: "Planning guidance, not financial advice."
   });
 }

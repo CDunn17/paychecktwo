@@ -1,9 +1,11 @@
 import { createPaycheckAgent } from "./create-agent.js";
 import { settleWithinDeadline, WallClockDeadlineError } from "./execution-budget.js";
 import { PlanStore } from "./plan-store.js";
+import { prepareMonitoringToolResult } from "./monitoring-context.js";
 import { finalizeRecommendation, recommendationMatchesPrimaryAnalysis } from "./recommendation-policy.js";
 import { inspectUnknownForSensitiveData, sanitizeAgentRequest, summarizeSensitiveData } from "./safety.js";
-import { AgentRequestSchema, RecommendationSchema, type AgentRequest } from "./schemas.js";
+import { AgentRequestSchema, type AgentRequest } from "./request-schemas.js";
+import { RecommendationSchema } from "./schemas.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_TURN_LIMIT = 9;
@@ -68,7 +70,10 @@ export class PaycheckAgentService {
   async advise(rawRequest: unknown) {
     const parsedRequest: AgentRequest = AgentRequestSchema.parse(rawRequest);
     const { request, summary: inputRedactions } = sanitizeAgentRequest(parsedRequest);
-    this.planStore.set(request.sessionId, request.plan, request.policySources);
+    const monitoringResult = request.monitoring
+      ? prepareMonitoringToolResult(request.plan, request.asOf as string, request.monitoring)
+      : undefined;
+    this.planStore.set(request.sessionId, request.plan, request.policySources, monitoringResult);
     try {
       const timeoutMs = positiveNumberFromEnv("STRANDS_TIMEOUT_MS", DEFAULT_TIMEOUT_MS);
       const startedAt = performance.now();
@@ -94,7 +99,7 @@ export class PaycheckAgentService {
       const asOf = request.asOf ?? new Date().toISOString().slice(0, 10);
       const invocationController = new AbortController();
       const invocation = agent.invoke(
-        `Session ID: ${request.sessionId}\nAs-of date: ${asOf}\nPolicy sources available: ${request.policySources.length}\nUser request: ${request.message}`,
+        `Session ID: ${request.sessionId}\nAs-of date: ${asOf}\nPolicy sources available: ${request.policySources.length}\nMonitoring analysis available: ${monitoringResult ? "yes; call analyze_income_monitoring exactly once before planning" : "no; do not call analyze_income_monitoring"}\nUser request: ${request.message}`,
         {
           cancelSignal: invocationController.signal,
           limits: {
@@ -160,6 +165,24 @@ export class PaycheckAgentService {
       if (completedEntries.some((entry) => entry.failed)) {
         throw new AgentIncompleteError("toolFailed", wallClockMs, diagnostics);
       }
+      const monitoringAnalysisCalls = completedEntries.filter(
+        (entry) => entry.tool === "analyze_income_monitoring" && !entry.failed
+      ).length;
+      const monitoringAnalysisIndex = completedEntries.findIndex(
+        (entry) => entry.tool === "analyze_income_monitoring" && !entry.failed
+      );
+      const primaryAnalysisIndex = completedEntries.findIndex(
+        (entry) => entry.tool === "analyze_paycheck_scenario" && !entry.failed
+      );
+      if (monitoringResult && (
+        monitoringAnalysisCalls !== 1
+        || (primaryAnalysisIndex >= 0 && monitoringAnalysisIndex > primaryAnalysisIndex)
+      )) {
+        throw new AgentIncompleteError("monitoringRoutingFailed", wallClockMs, diagnostics);
+      }
+      if (!monitoringResult && monitoringAnalysisCalls !== 0) {
+        throw new AgentIncompleteError("monitoringRoutingFailed", wallClockMs, diagnostics);
+      }
       if (structuredOutput === undefined) {
         throw new AgentIncompleteError(result.stopReason, wallClockMs, diagnostics);
       }
@@ -170,7 +193,11 @@ export class PaycheckAgentService {
       if (!verifierSucceeded || verifierResult === undefined) {
         throw new AgentIncompleteError("verificationFailed", wallClockMs, diagnostics);
       }
-      const modelRecommendation = finalizeRecommendation(structuredOutput, verifierResult);
+      const modelRecommendation = finalizeRecommendation(
+        structuredOutput,
+        verifierResult,
+        monitoringResult?.caseDecision ?? null
+      );
       const primaryAnalysis = getPrimaryAnalysis();
       if (
         primaryAnalysis === undefined
@@ -216,7 +243,7 @@ export class PaycheckAgentService {
         stopReason: "toolUse"
       };
     } finally {
-      if (request.privacy.ephemeral) this.planStore.delete(request.sessionId);
+      this.planStore.delete(request.sessionId);
     }
   }
 }

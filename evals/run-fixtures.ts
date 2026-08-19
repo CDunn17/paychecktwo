@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { analyzeCashflow, findPressurePoints } from "../src/agent/calculations.js";
+import { prepareMonitoringToolResult } from "../src/agent/monitoring-context.js";
+import { MonitoringRequestContextSchema } from "../src/agent/request-schemas.js";
 import { DisruptionSchema, FinancialPlanSchema } from "../src/agent/schemas.js";
 
 const fixtures = JSON.parse(await readFile(new URL("./cases.json", import.meta.url), "utf8")) as Array<{
@@ -7,6 +9,8 @@ const fixtures = JSON.parse(await readFile(new URL("./cases.json", import.meta.u
   disruption: unknown;
   expectedTools: string[];
   successCriteria: string[];
+  monitoring?: unknown;
+  expectedMonitoringDisposition?: "no_case" | "needs_confirmation" | "open_case";
 }>;
 
 const plan = FinancialPlanSchema.parse({
@@ -29,6 +33,19 @@ for (const fixture of fixtures) {
   const pressurePoints = findPressurePoints(analysis);
   if (!fixture.expectedTools.includes("verify_financial_plan")) throw new Error(`${fixture.id}: verifier is not required`);
   if (fixture.successCriteria.length < 3) throw new Error(`${fixture.id}: success criteria are too weak`);
+  if (fixture.monitoring) {
+    const monitoring = prepareMonitoringToolResult(
+      plan,
+      "2026-08-17",
+      MonitoringRequestContextSchema.parse(fixture.monitoring)
+    );
+    if (!fixture.expectedTools.includes("analyze_income_monitoring")) {
+      throw new Error(`${fixture.id}: monitoring tool is not required`);
+    }
+    if (monitoring.caseDecision.disposition !== fixture.expectedMonitoringDisposition) {
+      throw new Error(`${fixture.id}: monitoring disposition does not match fixture expectation`);
+    }
+  }
   console.log(`${fixture.id.padEnd(28)} risk=${analysis.riskLevel.padEnd(9)} safe=$${analysis.safeToSpend.toFixed(2).padStart(7)} pressure_points=${pressurePoints.length}`);
 }
 

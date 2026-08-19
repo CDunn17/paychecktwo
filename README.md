@@ -2,8 +2,8 @@
 
 > A Strands early-warning and resolution agent that monitors expected cash flow, detects income disruptions before essential bills are at risk, and manages a verified response without judging the user's choices.
 
-**Project phase:** Synthetic income monitoring and resolution-case foundation<br>
-**Last updated:** August 18, 2026
+**Project phase:** Strands-integrated income monitoring and resolution-case foundation<br>
+**Last updated:** August 19, 2026
 
 ## The hackathon goal
 
@@ -30,7 +30,7 @@ The backend uses the official [`@strands-agents/sdk`](https://www.npmjs.com/pack
 | Strands capability | How Paycheck Two uses it |
 | --- | --- |
 | `Agent` and the model-driven loop | The orchestrator selects tools and iterates based on their results. |
-| Zod-backed function tools | Financial inputs are validated and calculations remain deterministic. |
+| Zod-backed function tools | Financial inputs are validated and calculations remain deterministic; the orchestrator now consumes one authoritative minimized monitoring result through `analyze_income_monitoring`. |
 | Agent composition | Separate bounded Strands agents review policies/terms and verify the complete recommendation. |
 | Structured output | Every recommendation must pass a model-facing Zod contract and a deterministic application safety policy. |
 | Structured autonomy | Every option must expose an upside, downside, and priority fit; application code fixes the user as decision owner and supplies the neutral closing question. |
@@ -54,13 +54,15 @@ flowchart LR
     Feed["Bounded synthetic history now; read-only adapters later"] --> Inference["Recurring-income inference and user correction"]
     Inference --> Monitor["Income expectation monitor"]
     Monitor --> Detection["Deterministic disruption and coverage analysis"]
-    Detection --> Case["Resolution case"]
+    Detection --> Decision["Application-owned case-opening decision"]
     User["User corrections and decisions"] --> UI["Demo dashboard"]
     UI --> Preview["Local data preview and consent"]
     Preview --> Redact["Application redaction boundary"]
     Redact --> API["Local agent API"]
-    API --> Orchestrator["Paycheck Two orchestrator"]
-    Case -. "Strands tool wiring next" .-> Orchestrator
+    API --> LocalMonitor["Local inference, monitoring, and minimization"]
+    LocalMonitor --> MonitorTool["Single-use monitoring-analysis tool"]
+    MonitorTool --> Orchestrator["Paycheck Two orchestrator"]
+    Decision --> MonitorTool
     Orchestrator --> Snapshot["Financial snapshot tool"]
     Orchestrator --> Analysis["Unified paycheck-scenario tool"]
     Orchestrator --> Pressure["Pressure-point detector"]
@@ -104,6 +106,9 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - [x] Request-scoped plan and policy cleanup after every ephemeral invocation, including failures
 - [x] Reduced paycheck amount exposed as deterministic pressure evidence even when current pre-payday risk remains stable
 - [x] Explicit prompt boundaries against flattery, moralizing, coercive value judgments, predatory or new-credit recommendations, illegal conduct, deception, and exploitation
+- [x] `analyze_income_monitoring` as a single-use Zod-backed Strands tool; the service fails closed when a monitoring request omits or duplicates the call
+- [x] Application-owned `no_case`, `needs_confirmation`, or `open_case` decision returned with the final recommendation
+- [x] First genuine contract-v14 monitoring trajectory: one authoritative monitoring call, one primary analysis, one verifier critique, first-try structured output, and all deterministic gates passed
 
 ### Deterministic financial tools — implemented
 
@@ -134,8 +139,12 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - [x] Conservative same-day ordering that does not assume a deposit arrives before a bill
 - [x] Deterministic identification of protected obligations placed at risk
 - [x] Synthetic unit coverage for hourly variability, partial pay, missing freelance income, multiple sources, inferred income, and same-day timing
+- [x] Local recurring-income inference and cent-based monitoring prepared before Strands invocation, with raw history removed from the tool boundary
+- [x] Generic model-facing income and obligation identifiers rather than caller-supplied source aliases, transaction IDs, or bill labels
+- [x] Explicit protected-bill selection; flexible obligations cannot create a protected-obligation case trigger
+- [x] Deterministic case-opening policy: uncertain active income signals require confirmation, protected-obligation risk is material, and other confirmed disruptions return `no_case`
 
-This foundation has no bank, Zelle, Cash App, Venmo, biller, scheduler, browser-storage, or model connection. It accepts only caller-supplied synthetic normalized structures, returns fixed structured facts, performs no logging or persistence, and cannot initiate an external action. Wiring it into the Strands loop is the next milestone.
+The monitoring path is now connected to the genuine Strands loop, but its source remains caller-supplied synthetic normalized history. It has no bank, Zelle, Cash App, Venmo, biller, or scheduler connection and cannot initiate an external action. The next milestone is the resolution-case state machine that will carry the deterministic opening decision through confirmation, options, preparation, follow-up, and closure or escalation.
 
 ### Demonstration interface — implemented
 
@@ -187,7 +196,7 @@ This foundation has no bank, Zelle, Cash App, Venmo, biller, scheduler, browser-
 - [x] Define the first synthetic monitoring boundary and integer-cent income/obligation contracts
 - [x] Implement deterministic variable-income assessment, disruption events, and conservative-versus-typical coverage forecasts
 - [x] Add recurring-income inference from a bounded synthetic transaction history, with confidence, correction, and provenance
-- [ ] Expose monitoring analysis as a Zod-backed Strands tool and require the orchestrator to open a case only for material or uncertain disruptions
+- [x] Expose monitoring analysis as a Zod-backed Strands tool and require the orchestrator to open a case only for material or uncertain disruptions
 - [ ] Define the resolution-case state machine: detected, needs-confirmation, options-ready, awaiting-decision, prepared, monitoring, resolved, or escalated
 - [ ] Add deterministic case completion criteria and require the independent verifier before closure
 - [ ] Build a synthetic event stream that demonstrates hourly income, freelance income, and multiple-job variability over time
@@ -331,7 +340,7 @@ For an unavailable provider, verify:
 3. The account has access to `STRANDS_MODEL_ID` in Amazon Bedrock.
 4. The selected model supports tool use and structured output.
 
-The API never returns raw provider errors to the browser. The server console retains a concise diagnostic for local development.
+The API never returns raw provider errors to the browser or application log. The server console records only a fixed unavailability category for unexpected provider failures.
 
 ## Validate the project
 
@@ -345,10 +354,11 @@ npm run eval:live -- --semantic
 npm run eval:semantic:adversarial
 ```
 
-`eval:fixtures` validates the deterministic setup without spending Bedrock tokens. `eval:live` runs all scenarios through the local API and genuine Strands/Bedrock loop. One or more fixture IDs can be supplied when resuming a run:
+`eval:fixtures` validates the deterministic setup without spending Bedrock tokens. It includes the first uncertain missing-income monitoring case. `eval:live` runs all scenarios through the local API and genuine Strands/Bedrock loop. One or more fixture IDs can be supplied when resuming a run:
 
 ```bash
 npm run eval:live -- late-paycheck-and-repair
+npm run eval:live -- uncertain-missing-income-monitor
 ```
 
 Repeated trials and a sanitized JSON report can be requested directly:
@@ -360,7 +370,7 @@ npm run eval:live -- --semantic --trials=3 --output=evals/results/my-semantic-ca
 npm run eval:semantic:adversarial -- --output=evals/results/my-adversarial-calibration.json
 ```
 
-The live runner uses a fixed `asOf` date and unique ephemeral session ID so results are replayable without old session history. It fails if an expected tool is missing, any tool fails, structured output takes more than one attempt, the verifier is not applied, scenario numbers differ from deterministic calculations, policy findings lose their source grounding, approval policy is violated, the safety boundary is absent, or the agent does not finish with structured output. Repeated reports include pass rate, latency range/mean/standard deviation, cycle and tool-call distributions, token use, estimated cost, tool-stage durations, and content-free model-stage durations. If the server returns `AGENT_INCOMPLETE`, the runner now preserves only fixed operational metadata—stop reason, elapsed time, cycles, token counts, tool/model stage names, durations, and completion state—rather than discarding the diagnostic or retaining request/response content.
+The live runner uses a fixed `asOf` date and unique ephemeral session ID so results are replayable without old session history. It fails if an expected tool is missing, any tool fails, the primary analysis or supplied monitoring analysis is not called exactly once, monitoring does not precede planning, the application-owned monitoring disposition differs from the fixture, structured output takes more than one attempt, the verifier is not applied, scenario numbers differ from deterministic calculations, policy findings lose their source grounding, approval policy is violated, the safety boundary is absent, or the agent does not finish with structured output. Repeated reports include pass rate, latency range/mean/standard deviation, cycle and tool-call distributions, token use, estimated cost, tool-stage durations, and content-free model-stage durations. If the server returns `AGENT_INCOMPLETE`, the runner preserves only fixed operational metadata—stop reason, elapsed time, cycles, token counts, tool/model stage names, durations, and completion state—rather than discarding the diagnostic or retaining request/response content.
 
 `--semantic` adds a separate evaluation-only Strands/Bedrock judge. The judge receives only synthetic fixture data and the candidate recommendation, treats that recommendation as untrusted data, and returns a strict Zod assessment. Application code also scans for the explicitly prohibited stock-praise phrases without relying on the judge, then applies the pass thresholds: all applicable quality scores must be at least 4/5, harmful-advice safety must be 5/5, any style or safety flag fails the run, and a policy scenario must score at least 4/5 for policy caution. Natural-language success criteria remain visible because the semantic judge complements rather than replaces human review and deterministic adversarial tests.
 
@@ -371,6 +381,12 @@ npm run eval:semantic:reclassify -- input-report.json output-report.json
 ```
 
 ## Latest live-agent results
+
+### Contract v14 monitoring smoke
+
+The first genuine monitoring trajectory used the new uncertain missing-income fixture. The orchestrator retrieved `analyze_income_monitoring` exactly once, followed by the financial snapshot, exactly one primary paycheck analysis, one actual verifier critique, and first-try structured output. All automatic gates passed, including the application-owned `needs_confirmation` disposition, model-input/output safety boundary, scenario-number grounding, approval policy, and absence of tool failures.
+
+The final run completed in 47.81 seconds over four orchestrator cycles and five tool calls, using 28,620 total tokens at an estimated $0.1162 before credits. The verifier completed one critique with no failed checks. This is proof that the new route works through Strands and Bedrock, not a reliability claim; repeated and adversarial monitoring trials remain on the roadmap. The privacy-safe report is [`evals/results/2026-08-19-contract-v14-monitoring-smoke.json`](evals/results/2026-08-19-contract-v14-monitoring-smoke.json).
 
 ### Semantic evaluator rubric v1
 
@@ -641,7 +657,8 @@ User safety, data minimization, and protection of personally identifiable inform
 Safeguards currently implemented:
 
 - **Read-only scope:** Paycheck Two cannot transfer money, contact a biller, change a due date, apply for credit, or modify an account. It provides analysis and conditional options only.
-- **Deterministic financial arithmetic:** Code—not the model—calculates balances, obligations, shortfalls, safe-to-spend amounts, timelines, option impacts, and conditional policy relief.
+- **Deterministic financial arithmetic:** Code—not the model—calculates balances, obligations, shortfalls, safe-to-spend amounts, timelines, option impacts, conditional policy relief, recurring-income assessments, disruption events, and conservative/typical monitoring forecasts.
+- **Application-owned monitoring decision:** Strands must retrieve the authoritative monitoring result exactly once when supplied, but deterministic policy alone decides whether the signal is `no_case`, `needs_confirmation`, or `open_case`. The final response field is injected by application code, so the model cannot upgrade a non-material signal into a case.
 - **Mandatory independent verification:** The service rejects a recommendation unless the separate verifier agent completes one bounded critique. The verifier returns only fixed failed-check codes for arithmetic, essentials, assumptions, read-only actions, policy support, autonomy, and harmful advice; application code supplies correction instructions without retaining verifier prose.
 - **Application-enforced grounding:** The service records the authoritative primary calculation and rejects a final recommendation whose risk level, safe-to-spend amount, or daily flexible limit differs from it. This runtime boundary no longer depends on the verifier or evaluator noticing fabricated arithmetic.
 - **Structured safety contracts:** Zod schemas constrain requests, tools, policy findings, action types, final recommendations, and autonomy fields. Invalid agent output is rejected rather than shown as a completed plan.
@@ -653,7 +670,7 @@ Safeguards currently implemented:
 - **Secret handling:** Bedrock credentials belong in the Git-ignored `.env` file. The example environment file contains no credential, and provider errors are not returned raw to the browser.
 - **Pre-model data boundary:** The local API inspects every free-text request surface and masks high-confidence card, bank/routing, SSN, AWS-key, credential, email, and phone patterns before placing the plan in the request-scoped store or invoking Strands.
 - **Informed consent:** Every genuine agent request first shows the configured destination, categories of data that will be sent, and counts/types of automatic redactions. The model endpoint rejects requests without affirmative consent.
-- **Ephemeral by default:** Private mode skips Strands `LocalFileStorage`; the request-scoped plan and policy context is cleared in a `finally` block on success or failure.
+- **Ephemeral by default:** Private mode skips Strands `LocalFileStorage`; request-scoped plan, policy, and derived monitoring context is cleared in a `finally` block on every success or failure, including when Strands message persistence is explicitly enabled.
 - **Output leak prevention:** Final structured recommendations are recursively inspected for sensitive identifiers and blocked before display if a match remains.
 - **User-controlled deletion:** The interface can delete the locally saved plan, policy sources, and session identifier from browser storage. Private mode prevents new changes from being persisted.
 - **Evaluation coverage:** Automated checks cover expected tool use, failed tools, numerical grounding, policy provenance, approval policy, verifier completion, fixed verifier categories, and structured-output behavior. The optional semantic judge adds explicit autonomy and harmful-advice categories; its result cannot override a failed deterministic check. Synthetic adversarial candidates calibrate the judge against both harmful advice and safe warnings without storing candidate text in reports.
@@ -665,13 +682,13 @@ Safeguards currently implemented:
 
 ### Monitoring milestone safety boundary
 
-1. **Data inventory:** The pure modules receive a maximum 180-day history of opaque transaction IDs, dates, integer-cent amounts, direction, opaque source aliases, fixed classifications, and synthetic provenance; optional user decisions; balances, protected buffers, expected income ranges, confidence, observed-income matches, and upcoming obligations. They derive cadences, amount ranges, fixed evidence codes, confirmation state, disruption codes, forecast balances, and opaque obligation IDs at risk. They send, log, cache, and persist nothing.
-2. **Minimization:** The contracts do not accept account or routing numbers, payment credentials, payment-app handles, raw merchant descriptions, names, addresses, or free-form transaction notes. Source aliases and transaction IDs are schema-bounded and synthetic. A future adapter must replace provider identifiers and descriptions locally before this boundary.
-3. **Trust boundary:** Current monitoring data remains inside the local Node.js process and synthetic test fixtures. It does not enter the browser, Strands, Bedrock, AWS storage, an external API, or evaluation reports.
-4. **Consent and control:** No external transmission or persistence occurs in this slice. Automatic inference requires three distinct observation dates. Every inferred expectation carries a confirmation flag, and inferred income is excluded from the conservative forecast. The user can confirm the displayed pattern, supply a complete corrected expectation, or reject it; each applied decision remains explicit in the result.
-5. **Retention:** Inputs and results live only for the function call and have no module-owned storage. A future scheduler or adapter needs a separate encrypted retention, correction, export, revocation, and deletion design.
-6. **Abuse and failure modes:** Schemas reject histories over 180 days, out-of-window records, unknown override sources, duplicate IDs or overrides, future-dated observations, invalid horizons or dates, non-integer money, and impossible expected ranges. Reimbursements, transfers, unknown credits, and debits cannot create income patterns. Sparse history is not inferred; irregular history requires a complete correction rather than confirmation. Same-day bills are evaluated before income because deposit timing is unknown. False preclassification, source-alias collisions, and stale patterns remain risks requiring adapter and correction controls.
-7. **Verification:** Synthetic tests cover variable weekly income, biweekly and multiple sources, semimonthly anchors, month-end cadence, split deposits, sparse and irregular history, excluded transaction classes, provenance, confirmation, complete correction, rejection, fixed error codes, bounded-input failures, overdue inferred income, partial pay, protected-obligation risk, and same-day timing. Strands trajectory, model-output, persistence, and adapter tests remain required when those boundaries are introduced.
+1. **Data inventory:** The API can receive a maximum 180-day synthetic normalized history containing opaque transaction IDs, dates, integer-cent amounts, direction, opaque source aliases, fixed classifications, synthetic provenance, explicit pattern corrections, a bounded forecast horizon, and an explicit list of protected plan-bill IDs. Local code combines those fields with the sanitized balance, buffer, bill amounts/dates, and plan. It derives cadences, confirmation state, generic source/obligation identifiers, fixed disruption codes, cent-based forecasts, and one fixed case disposition. Raw monitoring history is not logged, placed in the Strands tool store, added to prompts, or retained in evaluation reports.
+2. **Minimization:** The monitoring contract has no field for account/routing numbers, credentials, payment-app handles, merchant or counterparty descriptions, names, addresses, or free-form transaction notes. Before Strands runs, caller aliases, transaction IDs, and bill labels are replaced with generic sequential identifiers. The model receives only source kind/cadence/confirmation state, assessments, fixed disruption codes, forecast amounts/dates, opaque obligations at risk, and the case decision.
+3. **Trust boundary:** Synthetic normalized history crosses the local API boundary and is processed inside the Node.js service. Only the minimized derived result crosses into the Strands orchestrator and Amazon Bedrock through `analyze_income_monitoring`; raw history does not. No monitoring content enters AWS storage or evaluation reports. A future browser event feed, scheduler, or read-only provider adapter is a new trust boundary and requires its own safety-gate review.
+4. **Consent and control:** The safety preview now distinguishes local-only monitoring history from the derived categories sent through Strands and states that raw history is not transmitted to the model. Model transmission still requires explicit consent. Inference requires three distinct observations; inferred income remains excluded from the conservative forecast. Users can confirm, completely correct, or reject a pattern, and must explicitly identify which plan bills are protected.
+5. **Retention:** Raw history exists only in the parsed request and local inference call. The minimized monitoring result is held in the request-scoped in-memory tool store and deleted in `finally` on success, validation failure after storage, timeout, or model/tool failure. Strands file-session opt-in can retain model-visible conversation content, but not the application tool store or raw normalized history. No monitoring data is written to application files or reports.
+6. **Abuse and failure modes:** Schemas reject histories over 180 days, misaligned as-of dates, out-of-window records, unknown or duplicate overrides, unknown or duplicate protected bills, invalid horizons/dates, non-integer money, and impossible expected ranges. Reimbursements, transfers, unknown credits, and debits cannot create income patterns. Sparse history is not inferred; irregular history requires a complete correction. Same-day bills precede income. The monitoring tool is single-use, unavailable without stored context, and mandatory exactly once when context exists. False preclassification, source-alias collisions, stale patterns, and misclassified protected bills remain risks requiring correction controls.
+7. **Verification:** Deterministic tests cover inference, exclusion rules, corrections, redaction consistency, minimized tool output, uncertain and material opening decisions, the confirmed non-material `no_case` path, request alignment, protected-bill references, and explicit single-use routing instructions. The deterministic evaluation suite now contains five scenarios including an uncertain missing-income monitor. The first genuine Bedrock monitoring smoke run passed every routing, grounding, verification, safety, and structured-output gate; repeated trials and adversarial monitoring cases remain necessary before making a reliability claim.
 
 Current safety limitations:
 
@@ -679,6 +696,7 @@ Current safety limitations:
 - Existing browser data is not automatically erased when private mode is enabled; the user-facing deletion control removes it. Browser local storage and opt-in Strands file sessions are not appropriate persistence for real financial data.
 - The prototype has no user authentication, tenant isolation, encrypted application storage, consent ledger, or export workflow.
 - Recurring-income inference begins after a transaction has been assigned an opaque source alias and fixed classification. The current prototype does not safely normalize or classify raw provider transaction descriptions, and a mistaken upstream classification can still produce a false candidate pattern.
+- The API-level monitoring path accepts only synthetic normalized history. There is not yet a scheduler, event stream, encrypted case store, browser monitoring editor, or provider adapter, and the deterministic case-opening result does not yet progress through a resolution-case state machine.
 - Relevant plan and policy content, after the first-cut redaction boundary, is sent to the configured Bedrock model when the agent evaluates it.
 - Pasted text is supported, but secure file/PDF ingestion and page-level citations are not yet implemented.
 - Contract v12 passed 11/12 repeated full-campaign trajectories, and the exact remaining schema failure passed 3/3 after the contract-v13 repair. Contract v13 has not yet been rerun three times across all four scenarios, so production reliability is not established.
