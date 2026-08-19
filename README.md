@@ -1,25 +1,27 @@
 # Paycheck Two
 
-> A Strands agent that helps people navigate the fragile period between paychecks by turning changing circumstances into a verified, evidence-backed plan.
+> A Strands early-warning and resolution agent that monitors expected cash flow, detects income disruptions before essential bills are at risk, and manages a verified response without judging the user's choices.
 
-**Project phase:** User safety, agent reliability, and evaluation<br>
+**Project phase:** Synthetic income monitoring and resolution-case foundation<br>
 **Last updated:** August 18, 2026
 
 ## The hackathon goal
 
-Paycheck Two is an **agent project**, not primarily a budgeting website. The web interface is the demonstration surface for a Strands-native reasoning system.
+Paycheck Two is an **agent project**, not primarily a budgeting website. The web interface is the demonstration surface for a Strands-native monitoring and resolution system.
 
-People living paycheck to paycheck rarely have a static budgeting problem. A delayed deposit, smaller shift, surprise repair, or bill-date change can invalidate yesterday's plan. Paycheck Two should accept that open-ended situation, inspect the user's current financial snapshot, choose the appropriate analytical tools, simulate the disruption, compare possible responses, independently verify the resulting plan, and explain the tradeoffs without judgment.
+People with hourly work, freelance clients, multiple jobs, or otherwise variable income rarely have a static budgeting problem. A delayed deposit, smaller set of shifts, missing client payment, surprise repair, or bill-date change can invalidate yesterday's plan. Paycheck Two should maintain a user-correctable picture of expected income and obligations, monitor for meaningful deviations, determine whether protected essentials are at risk, and open a resolution case before the user has to discover the problem manually.
+
+The hackathon target is an end-to-end **financial disruption resolution workflow**: detect a possible disruption, show the evidence and uncertainty, quantify its consequences deterministically, surface only the decisions that require the user, prepare approved next actions, track their outcomes, replan, and close or escalate the case using explicit completion criteria. The current build remains read-only. Payment-app support is limited to monitoring, preparation, and an official user-controlled handoff; autonomous payment execution is outside the hackathon scope.
 
 The finished project should make the distinction between an LLM response and an agent obvious:
 
-1. The model interprets the user's goal or disruption.
-2. The Strands agent decides which tools it needs and invokes them.
-3. Deterministic code performs all financial arithmetic.
-4. The agent iterates when tool results reveal a shortfall or missing information.
-5. A verifier agent checks grounding, assumptions, protected essentials, and safety.
-6. The orchestrator returns a validated, structured action plan.
-7. The UI shows both the result and a human-readable execution trace.
+1. Deterministic monitoring evaluates confirmed and inferred income expectations against observed events.
+2. The monitor emits evidence-backed disruption and protected-obligation risk signals without assigning moral meaning to spending.
+3. The Strands orchestrator decides whether it needs forecasting, policy review, option comparison, or user clarification.
+4. Deterministic code performs all financial arithmetic and treats inferred income conservatively.
+5. The agent creates and updates a structured resolution case rather than ending at one answer.
+6. A verifier agent checks grounding, assumptions, protected essentials, autonomy, and safety.
+7. The orchestrator returns a validated decision or action package, and the UI exposes the trajectory and case status.
 
 ## Why Strands is central
 
@@ -49,11 +51,15 @@ This is **evaluation-driven development**, not model training: Paycheck Two does
 
 ```mermaid
 flowchart LR
-    User["User goal or disruption"] --> UI["Demo dashboard"]
+    Feed["Synthetic event feed now; read-only adapters later"] --> Monitor["Income expectation monitor"]
+    Monitor --> Detection["Deterministic disruption and coverage analysis"]
+    Detection --> Case["Resolution case"]
+    User["User corrections and decisions"] --> UI["Demo dashboard"]
     UI --> Preview["Local data preview and consent"]
     Preview --> Redact["Application redaction boundary"]
     Redact --> API["Local agent API"]
     API --> Orchestrator["Paycheck Two orchestrator"]
+    Case -. "Strands tool wiring next" .-> Orchestrator
     Orchestrator --> Snapshot["Financial snapshot tool"]
     Orchestrator --> Analysis["Unified paycheck-scenario tool"]
     Orchestrator --> Pressure["Pressure-point detector"]
@@ -63,7 +69,7 @@ flowchart LR
     Relief --> Orchestrator
     Orchestrator --> Verifier["Bounded verifier-agent tool"]
     Verifier --> Orchestrator
-    Orchestrator --> Result["Validated recommendation"]
+    Orchestrator --> Result["Validated case decision or action package"]
     Result --> OutputScan["Sensitive-output scan"]
     OutputScan --> UI
     Result -. "Synthetic evaluation only" .-> Judge["Semantic judge agent"]
@@ -109,6 +115,20 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - [x] Explicit protection of upcoming obligations and the user's safety buffer
 - [x] Quantified warnings when an option reduces the buffer or assumes a bill can move
 
+### Synthetic income-monitoring foundation — implemented
+
+- [x] Strict Zod contracts for expected income, observed deposits, upcoming obligations, monitoring confidence, and integer-cent amounts
+- [x] Separate expected-income ranges and grace periods for hourly jobs, salaried jobs, freelance clients, benefits, and other sources
+- [x] Independent assessment of multiple jobs or clients as `pending`, `grace_period`, `met`, `late`, `reduced`, or `missing`
+- [x] Fixed-code disruption events for late-pending, late, reduced, and missing income
+- [x] Conservative and typical coverage forecasts through a bounded horizon
+- [x] Inferred income excluded from the conservative forecast until the user confirms it
+- [x] Conservative same-day ordering that does not assume a deposit arrives before a bill
+- [x] Deterministic identification of protected obligations placed at risk
+- [x] Synthetic unit coverage for hourly variability, partial pay, missing freelance income, multiple sources, inferred income, and same-day timing
+
+This first slice has no bank, Zelle, Cash App, Venmo, biller, scheduler, browser-storage, or model connection. It accepts only caller-supplied synthetic structures, returns fixed structured facts, performs no logging or persistence, and cannot initiate an external action. Wiring it into the Strands loop is the next milestone.
+
 ### Demonstration interface — implemented
 
 - [x] Responsive paycheck dashboard
@@ -153,7 +173,23 @@ Financial calculations are deliberately outside the model. The model decides *wh
 
 ## What remains
 
-### Highest priority
+### Highest priority — monitoring and resolution
+
+- [x] Reframe Paycheck Two as a consent-based financial early-warning and resolution agent rather than a one-response planner
+- [x] Define the first synthetic monitoring boundary and integer-cent income/obligation contracts
+- [x] Implement deterministic variable-income assessment, disruption events, and conservative-versus-typical coverage forecasts
+- [ ] Add recurring-income inference from a bounded synthetic transaction history, with confidence, correction, and provenance
+- [ ] Expose monitoring analysis as a Zod-backed Strands tool and require the orchestrator to open a case only for material or uncertain disruptions
+- [ ] Define the resolution-case state machine: detected, needs-confirmation, options-ready, awaiting-decision, prepared, monitoring, resolved, or escalated
+- [ ] Add deterministic case completion criteria and require the independent verifier before closure
+- [ ] Build a synthetic event stream that demonstrates hourly income, freelance income, and multiple-job variability over time
+- [ ] Add payment-app-aware classifications for income, reimbursements, transfers, and scheduled obligations without assuming that P2P activity is wages or a bill
+- [ ] Implement action levels 1–3 only: monitor, prepare, and official user-controlled handoff; do not execute a payment
+- [ ] Run genuine Bedrock-backed monitoring and resolution trajectories, then add deterministic, semantic, and adversarial evaluations
+- [ ] Add a guided end-to-end demo in which a missing or reduced income event threatens an essential bill, the user makes one value decision, and the agent replans and closes or escalates the case
+- [ ] Evaluate one authorized read-only sandbox adapter only after its data inventory, consent, retention, and revocation design passes the safety gate
+
+### Reliability foundation — completed and maintained
 
 - [x] Run the full agent loop against an enabled Bedrock Claude Sonnet 4.6 model
 - [x] Capture a successful real trajectory for the compound late-paycheck-and-repair scenario
@@ -171,15 +207,18 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - [x] Structurally eliminate the dual-primary route by replacing separate timeline/disruption tools with one `analyze_paycheck_scenario` call
 - [x] Rerun all four showcase scenarios through contract v11, including policy-review latency and semantic scoring, to establish a contemporaneous full baseline
 - [x] Run the unified route three times per scenario, preserve the failed 7/12 baseline, and repair verifier, deadline, and optional autonomy-field failure modes
-- [ ] Stream Strands events to the browser instead of waiting for a complete response
-- [ ] Export OpenTelemetry traces and include a polished trace view in the demo
+
+### Later hackathon milestones
+
+- [ ] Stream Strands events and resolution-case changes to the browser instead of waiting for a complete response
+- [ ] Export content-free OpenTelemetry traces and include a polished trace view in the demo
 - [ ] Add current, location-aware suggestions for savings and support resources such as 211/help lines, food banks, benefit screening, utility relief, and transportation assistance
 - [ ] Add trustworthy resource provenance, location consent, freshness checks, and a way to report unavailable or incorrect resources
 
 ### Before hackathon submission
 
-- [ ] Add a guided demo mode for the compound “late paycheck plus car repair” scenario
-- [ ] Demonstrate multi-turn session memory and a user correction changing the plan
+- [ ] Add the guided variable-income disruption and resolution demo described above
+- [ ] Demonstrate case memory and a user correction changing an inferred income pattern and the resulting plan
 - [ ] Add adversarial safety cases: prompt injection, predatory lending, skipped essentials, fabricated bill changes, and unsupported arithmetic
 - [ ] Add adversarial policy-document cases: embedded prompt injection, outdated effective dates, conflicting clauses, missing pages, and unsupported eligibility claims
 - [ ] Add file/PDF ingestion and page-level citations; the current milestone accepts typed knowledge or pasted relevant terms
@@ -193,7 +232,7 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - [x] Explicit per-request model-transmission consent in the local prototype
 - [ ] Encrypted, authenticated persistence and a consent ledger for any real financial data
 - [ ] Audited bank/transaction provider integration
-- [ ] If state-changing money tools are ever introduced, require explicit human approval through a Strands interrupt before every external action
+- [ ] If state-changing money tools are ever introduced after a separate design review, require explicit human approval through a Strands interrupt before every external action
 - [ ] Reviewed financial guidance and regional compliance analysis
 - [ ] Rate limiting, request correlation, structured logs, and operational alerting
 - [ ] Accessibility audit and broader usability testing
@@ -204,7 +243,9 @@ Financial calculations are deliberately outside the model. The model decides *wh
 - **Location-aware support resources:** request coarse location only when needed, explain why, avoid persistence by default, require current authoritative provenance, and add a narrow allowlist for verified public help-line phone numbers so the output scanner remains fail-closed for personal numbers.
 - **AWS deployment:** replace local API keys with workload IAM roles and temporary credentials; add authentication, tenant isolation, TLS, rate limits, encrypted storage, bounded retention, safe audit metadata, secret scanning, AWS Budgets alerts, and deletion/export workflows.
 - **Bedrock Guardrails and observability:** evaluate sensitive-information masking and prompt-attack filters as defense in depth. Before enabling invocation logging or OpenTelemetry export, prove that prompts, tool parameters, policy text, responses, and redaction matches cannot enter logs or traces.
-- **Future account integrations:** complete a separate threat model, minimize OAuth scopes, use audited providers and token storage, support revocation, and preserve explicit human approval for every consequential external action.
+- **Read-only monitoring adapters:** complete a separate threat model and data inventory, minimize OAuth scopes, use provider-hosted authorization and audited token storage, support revocation and deletion, normalize locally, and prevent raw transaction descriptions or identifiers from entering model prompts, traces, or evaluation reports.
+- **Payment-app awareness:** classify wallet transfers, reimbursements, P2P income, direct debits, and scheduled obligations tentatively; require user confirmation before treating them as income or bills. Support monitor, prepare, and official user-controlled handoff only. Do not automate provider interfaces or use undocumented APIs.
+- **Future money movement:** keep payment execution outside the hackathon scope. Any later proposal requires a separate security and compliance review, explicit Strands approval before every transfer, verified payees and funding sources, idempotency, unknown-outcome reconciliation, and a prohibition on automatic retry.
 
 ## Run locally
 
@@ -523,20 +564,21 @@ Three trials per scenario are useful development evidence, not a production reli
 
 The strongest end-to-end scenario is:
 
-> “I have $642, three bills due, my paycheck may be three days late, and I need a $300 tire to get to work. Help me protect the essentials.”
+> A worker has two hourly jobs and one recurring freelance client. One job's deposit is smaller than its user-confirmed minimum and the client payment is still missing after its grace period. A scheduled rent payment is approaching, and the conservative forecast shows that the protected buffer will not survive the utility bill that follows.
 
-A successful trace should show:
+A successful trajectory should show:
 
-1. `get_financial_snapshot`
-2. `analyze_paycheck_scenario`
-3. `identify_pressure_points`
-4. `compare_plan_options`
-5. `verify_financial_plan`
-6. A structured response that clearly identifies the shortfall, protects essentials, quantifies options, exposes assumptions, and requires approval for any external action
+1. The synthetic event feed adds the smaller deposit and advances beyond the missing client's grace period.
+2. Deterministic monitoring assesses each income source independently and emits reduced- and missing-income events.
+3. The conservative coverage forecast excludes unconfirmed inferred income and identifies the first protected obligation at risk.
+4. The Strands orchestrator opens a resolution case, decides which planning and policy tools it needs, and asks only for a genuinely consequential confirmation or choice.
+5. The user corrects one inferred pattern or selects among options with explicit pros and cons.
+6. Paycheck Two prepares the approved action package or official provider handoff without executing a payment.
+7. A later synthetic event confirms the outcome; the agent replans and the verifier permits the case to close or requires escalation.
 
-That trajectory is part of the product: judges should be able to see that Strands is doing meaningful orchestration rather than serving as a thin wrapper around one model call.
+That lifecycle is the product: judges should be able to see that Strands manages work across time instead of serving as a thin wrapper around one model call. The earlier late-paycheck-and-tire and user-reported fee-waiver cases remain regression scenarios for compound disruption and conditional policy reasoning.
 
-A second showcase scenario demonstrates user-contributed knowledge:
+A supporting policy scenario remains:
 
 > “A $35 overdraft fee hit today. I remember that my bank may waive one overdraft fee each year, but I do not know whether I have already used it. Can that help this paycheck?”
 
@@ -558,6 +600,8 @@ The desired behavior is to review the remembered policy as a lead, preserve the 
 │       ├── bedrock-auth.ts        # Bedrock API-key header compatibility layer
 │       ├── create-agent.ts        # Strands orchestrator, verifier, sessions, hooks
 │       ├── execution-budget.ts    # Deadline-reserve calculation
+│       ├── income-monitoring.ts   # Deterministic income assessment and coverage forecast
+│       ├── monitoring-schemas.ts  # Synthetic monitoring and disruption contracts
 │       ├── plan-store.ts          # Request-scoped financial snapshot store
 │       ├── policy-review.ts       # Canonical policy-source enforcement
 │       ├── prompts.ts             # Orchestrator, policy reviewer, and verifier behavior
@@ -608,6 +652,16 @@ Safeguards currently implemented:
 - **Autonomy data boundary:** `upside` and `tradeoff` remain required model-derived response fields. `fitPriority` is model-derived when supplied and receives a fixed neutral application default when omitted; `decisionOwner` and the neutral choice question are application-controlled. They introduce no new user-input category, use the existing ephemeral request lifetime, pass through the existing output-sensitive-data scan, and are not retained in evaluation reports.
 - **Harm, legality, and ethics boundary:** Prompts and semantic hard gates explicitly reject predatory or high-cost credit, opening new credit to bridge a gap, illegal or deceptive conduct, unethical or exploitative conduct, and advice that sacrifices protected essentials. Model-provider safeguards remain defense in depth rather than the sole control.
 - **Persistent implementation guidance:** Root-level `AGENTS.md` makes the safety gate, AWS practices, and hackathon priorities explicit for future development sessions.
+
+### Monitoring milestone safety boundary
+
+1. **Data inventory:** The new pure module receives dates, integer-cent balances, protected buffers, expected income ranges, confidence labels, observed-income matches, and upcoming obligations. It derives fixed statuses, disruption event codes, forecast balances, and opaque obligation IDs at risk. It sends, logs, caches, and persists nothing.
+2. **Minimization:** The contract does not accept account or routing numbers, payment credentials, payment-app handles, raw merchant descriptions, names, addresses, or free-form transaction notes. Labels are bounded and synthetic in current tests; future adapters must replace sensitive provider values with local categories and opaque IDs before this boundary.
+3. **Trust boundary:** Current monitoring data remains inside the local Node.js process and synthetic test fixtures. It does not enter the browser, Strands, Bedrock, AWS storage, an external API, or evaluation reports.
+4. **Consent and control:** No external transmission or persistence occurs in this slice. Every inferred expectation or match carries a confirmation flag, and inferred income is excluded from the conservative forecast until the user confirms it.
+5. **Retention:** Inputs and results live only for the function call and have no module-owned storage. A future scheduler or adapter needs a separate encrypted retention, correction, export, revocation, and deletion design.
+6. **Abuse and failure modes:** Schemas reject unknown income references, duplicate IDs, future-dated observations, invalid horizons, malformed dates, non-integer money, and impossible expected ranges. Same-day bills are evaluated before income because deposit timing is unknown. False matches and stale expectations remain explicit risks and require correction controls before ingestion is added.
+7. **Verification:** Synthetic tests cover partial hourly pay before and after grace, missing freelance income, multiple independent sources, conservative exclusion of inferred income, protected-obligation risk, and same-day timing. Strands trajectory, model-output, prompt-injection, persistence, and adapter tests remain required when those boundaries are introduced.
 
 Current safety limitations:
 
